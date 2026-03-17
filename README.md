@@ -1,97 +1,189 @@
 # hirings-automation
 
-🤖 Automação de Pedidos de Contratação (Verdanadesk / GLPI + LLM)
+🤖 **Automação de Pedidos de Contratação** — Verdanadesk/GLPI + LLM
 
-📌 Visão Geral do Projeto
+---
 
-Este repositório contém um worker em Python concebido para automatizar o processamento de pedidos de "Nova Contratação" no sistema ITSM Verdanadesk (baseado em GLPI).
+## Índice
 
-O sistema atua como um pipeline de ETL (Extract, Transform, Load) impulsionado por Inteligência Artificial:
+- [Visão Geral](#visão-geral)
+- [Pipeline ETL](#pipeline-etl)
+- [Stack Tecnológica](#stack-tecnológica)
+- [Estrutura do Projeto](#estrutura-do-projeto)
+- [Arquitetura e Componentes](#arquitetura-e-componentes)
+- [Variáveis de Ambiente](#variáveis-de-ambiente)
+- [Como Executar](#como-executar)
+- [Troubleshooting](#troubleshooting)
 
-Extract (Extração): Busca chamados recém-abertos via API Rest do Verdanadesk e usa um LLM (OpenAI via LangChain) para extrair dados estruturados a partir de textos não-estruturados e ruidosos inseridos pelos Recursos Humanos.
+---
 
-Transform (Transformação): Aplica regras de negócio (formatação de telefone, tradução de cargos, definição de licenças Microsoft e RBAC) baseadas no vínculo contratual (PJ/CLT) e no fornecimento de equipamento.
+## Visão Geral
 
-Load (Carga): Gera um template padronizado em inglês e insere-o de volta no chamado original como um Acompanhamento Privado (ITILFollowup), alterando o estado do ticket para "Em Atendimento".
+Worker em Python que monitora filas de chamados ITSM no **Verdanadesk** (baseado em GLPI), extrai dados não-estruturados de solicitações de contratação por meio de um **LLM** (OpenAI), aplica **regras de negócio Dexian** e devolve um template padronizado em inglês como acompanhamento privado.
 
-🛠️ Stack Tecnológica
+O sistema opera como um **pipeline de ETL impulsionado por IA**, executando polling a cada 5 minutos.
 
-Linguagem: Python 3.x
+---
 
-Integração LLM: langchain-core, langchain-openai (Modelo: gpt-4o-mini)
+## Pipeline ETL
 
-Validação de Dados: pydantic (Garantia de tipagem do output do LLM)
+```mermaid
+flowchart LR
+    subgraph Extract
+        A[Polling API GLPI] --> B[Chamados status = Novo]
+        B --> C[LLM extrai dados\ncom structured output]
+    end
 
-Pedidos HTTP: requests (Comunicação com a API REST do GLPI/Verdanadesk)
+    subgraph Transform
+        C --> D[Pydantic valida\nesquema de dados]
+        D --> E[Regras de negócio\nPJ/CLT · Licenças · RBAC]
+    end
 
-Gestão de Ambiente: python-dotenv
+    subgraph Load
+        E --> F[Template em inglês\ngerado automaticamente]
+        F --> G[POST ITILFollowup\nprivado no chamado]
+        G --> H[PUT Status → 2\nEm Atendimento]
+    end
+```
 
-⚙️ Variáveis de Ambiente (.env)
+---
 
-Para que o worker funcione, as seguintes variáveis devem ser declaradas num ficheiro .env na raiz do projeto:
+## Stack Tecnológica
 
-VERDANADESK_URL=https://[seu-dominio][.verdanadesk.com/apirest.php](https://.verdanadesk.com/apirest.php)
-USER_TOKEN=[token_do_utilizador_glpi]
-APP_TOKEN=[token_da_aplicacao_api_glpi]
-OPENAI_API_KEY=[chave_api_openai]
-CATEGORIA_CONTRATACAO_IDS=152,153 # IDs das categorias ITIL separados por vírgula
+| Camada | Tecnologia | Finalidade |
+|--------|------------|------------|
+| Linguagem | Python 3.10+ | Runtime principal |
+| LLM | `langchain-core`, `langchain-openai` | Pipeline de extração via GPT-4o-mini |
+| Validação | `pydantic` | Contrato de dados tipado para output do LLM |
+| HTTP | `requests` | Comunicação com API REST GLPI/Verdanadesk |
+| Config | `python-dotenv` | Gestão segura de credenciais via `.env` |
+| Logging | `logging` (stdlib) | Logs estruturados com timestamp e níveis |
 
+---
 
-🏗️ Arquitetura e Componentes Principais
+## Estrutura do Projeto
 
-1. Contrato de Dados (DadosColaborador)
+```
+hirings-automation/
+├── .env                 # Credenciais e configurações (não commitado)
+├── .rules               # Diretrizes de atuação da IA
+├── automation.py         # Worker principal (ponto de entrada)
+└── README.md            # Esta documentação
+```
 
-Classe pydantic.BaseModel que define o esquema estrito de saída esperado pelo LLM. Se o LLM falhar na estruturação, o Pydantic rejeita a resposta. Contém os campos:
+---
 
-nome_completo, is_pj, data_inicio_dd_mm_yyyy, cargo_ingles, centro_custo, cidade_escritorio, telefone, gestor_nome, fornecedor_equipamento.
+## Arquitetura e Componentes
 
-2. Motor de Regras de Negócio (GeradorDeChamado)
+### 1. `DadosColaborador` — Contrato de Dados
 
-Responsável por consumir o objeto DadosColaborador e aplicar as lógicas empresariais:
+Classe `pydantic.BaseModel` que define o esquema estrito de saída do LLM. Se o modelo falhar na estruturação, o Pydantic rejeita a resposta.
 
-Regra PJ/Cooperados: Se is_pj for True, o email recebe o sufixo -ext (ex: nome.sobrenome-ext@dexian.com) e é removida a lista de distribuição global.
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `nome_completo` | `str` | Nome completo do colaborador |
+| `is_pj` | `bool` | `True` se PJ, cooperado ou consultoria externa |
+| `data_inicio_dd_mm_yyyy` | `str` | Data de início no formato `DD-MM-YYYY` |
+| `cargo_ingles` | `str` | Cargo traduzido para o inglês corporativo |
+| `centro_custo` | `str` | Centro de custo / departamento |
+| `cidade_escritorio` | `str` | Cidade do escritório de alocação |
+| `telefone` | `str` | Telefone de contato |
+| `gestor_nome` | `str` | Nome do gestor direto |
+| `fornecedor_equipamento` | `str` | `DEXIAN` ou `CLIENTE` |
 
-Regra de Equipamentos: * Se Fornecedor = DEXIAN: Atribui licença Microsoft F3 e laptop Y.
+### 2. `GeradorDeChamado` — Motor de Regras de Negócio
 
-Se Fornecedor = CLIENTE (Nuvem/BYOD): Atribui licença Microsoft Kiosk e laptop N.
+Consome um `DadosColaborador` e aplica as lógicas empresariais:
 
-Formatação: Converte datas de DD-MM-YYYY para MM/DD/YY, remove acentuação e converte telefones para o padrão internacional (+55).
+- **Regra PJ/Cooperado:** e-mail com sufixo `-ext`, lista de distribuição reduzida.
+- **Regra de Equipamento:**
+  - `DEXIAN` → Licença Microsoft F3, RBAC completo, laptop `Y`.
+  - `CLIENTE` → Licença Microsoft Kiosk, RBAC cloud-only, laptop `N`.
+- **Formatação:** datas `DD-MM-YYYY` → `MM/DD/YY`, remoção de acentos, telefone padronizado `+55`.
 
-3. Orquestrador (VerdanadeskAutomator)
+### 3. `VerdanadeskAutomator` — Orquestrador de I/O
 
-Classe responsável pela comunicação I/O:
+| Responsabilidade | Método |
+|-----------------|--------|
+| Autenticação + renovação de sessão | `_iniciar_sessao`, `_renovar_sessao` |
+| Polling de chamados novos | `buscar_novos_chamados` |
+| Pipeline completo por ticket | `processar_chamado` |
+| Configuração do LangChain | `_criar_extrator_chain` |
 
-Autenticação e gestão de sessão (Session-Token) na API do Verdanadesk.
+---
 
-Polling de novos chamados (Status = 1) baseados nas CATEGORIA_CONTRATACAO_IDS.
+## Variáveis de Ambiente
 
-Invocação da extrator_chain (LangChain with_structured_output) passando o texto do chamado.
+Crie um arquivo `.env` na raiz do projeto com as seguintes variáveis:
 
-Atualização do ticket via POST (Followup) e PUT (Mudança de Status para 2).
+| Variável | Descrição | Exemplo |
+|----------|-----------|---------|
+| `VERDANADESK_URL` | URL base da API REST do Verdanadesk | `https://empresa.verdanadesk.com/apirest.php` |
+| `USER_TOKEN` | Token do utilizador GLPI | `clIChS5lG9CHLVrj...` |
+| `APP_TOKEN` | Token da aplicação API GLPI | `a1b2c3d4e5f6...` |
+| `OPENAI_API_KEY` | Chave de API da OpenAI | `sk-proj-...` |
+| `CATEGORIA_CONTRATACAO_IDS` | IDs das categorias ITIL (separados por vírgula) | `152,153` |
 
-🚀 Como Executar Localmente
+```dotenv
+VERDANADESK_URL=https://empresa.verdanadesk.com/apirest.php
+USER_TOKEN=seu_token_aqui
+APP_TOKEN=seu_app_token_aqui
+OPENAI_API_KEY=sk-proj-sua-chave-aqui
+CATEGORIA_CONTRATACAO_IDS=152,153
+```
 
-Crie o ambiente virtual:
+---
 
+## Como Executar
+
+### 1. Crie o ambiente virtual
+
+```bash
 python -m venv .venv
+```
 
+### 2. Ative o ambiente
 
-Ative o ambiente virtual:
+```powershell
+# Windows (PowerShell)
+.\.venv\Scripts\Activate.ps1
+```
 
-Windows: .\.venv\Scripts\Activate.ps1
+```bash
+# Linux / macOS
+source .venv/bin/activate
+```
 
-Linux/Mac: source .venv/bin/activate
+### 3. Instale as dependências
 
-Instale as dependências:
-
+```bash
 pip install requests pydantic langchain-core langchain-openai python-dotenv
+```
 
+### 4. Configure o `.env`
 
-Configure o ficheiro .env com as suas credenciais.
+Copie o exemplo acima e preencha com suas credenciais.
 
-Inicie o worker (ele rodará em loop a cada 5 minutos):
+### 5. Inicie o worker
 
-python automacao_dexian.py
+```bash
+python automation.py
+```
 
+O worker executará em loop contínuo, consultando as filas a cada **5 minutos**.
 
-Documentação otimizada para ingestão de contexto por agentes LLM e revisão de código por pares.
+---
+
+## Troubleshooting
+
+| Sintoma | Causa Provável | Solução |
+|---------|---------------|---------|
+| `SystemExit` no startup | Variável de ambiente ausente | Verifique se todas as variáveis do `.env` estão preenchidas |
+| `401 Unauthorized` | Token expirado ou inválido | O worker tenta renovar automaticamente; valide `USER_TOKEN` e `APP_TOKEN` |
+| `Timeout` nas requisições | API lenta ou indisponível | O timeout padrão é 30s; verifique a conectividade com o Verdanadesk |
+| `Formato de data inesperado` | RH digitou data fora do padrão `DD-MM-YYYY` | O valor original é mantido; corrija manualmente no chamado |
+| LLM retorna dados inválidos | Texto do chamado ambíguo ou incompleto | O Pydantic rejeita a saída; o ticket é logado como erro e o loop continua |
+
+---
+
+> Documentação otimizada para ingestão de contexto por agentes LLM e revisão de código por pares.
