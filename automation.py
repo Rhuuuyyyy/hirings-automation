@@ -366,7 +366,7 @@ class VerdanadeskAutomator:
 # Loop de execução (Polling Worker)
 # ---------------------------------------------------------------------------
 
-INTERVALO_POLLING: int = 300  # 5 minutos
+INTERVALO_POLLING: int = 10
 
 
 def main() -> None:
@@ -385,7 +385,11 @@ def main() -> None:
             if chamados:
                 logger.info("%d chamado(s) novo(s) encontrado(s).", len(chamados))
             for chamado in chamados:
-                automator.processar_chamado(chamado["id"])
+                ticket_id = chamado.get("2") or chamado.get("id")
+                if ticket_id:
+                    automator.processar_chamado(ticket_id)
+                else:
+                    logger.error("Não foi possível extrair o ID do chamado. Retorno bruto: %s", chamado)
         except requests.exceptions.RequestException as exc:
             logger.error("Erro de rede no ciclo de polling: %s", exc)
         except Exception as exc:
