@@ -74,9 +74,9 @@ def _carregar_configuracao() -> dict[str, str]:
 
 CONFIG = _carregar_configuracao()
 
-VERDANADESK_URL: str = CONFIG["VERDANADESK_URL"]
-USER_TOKEN: str = CONFIG["USER_TOKEN"]
-APP_TOKEN: str = CONFIG["APP_TOKEN"]
+VERDANADESK_URL: str = CONFIG["VERDANADESK_URL"].strip()
+USER_TOKEN: str = CONFIG["USER_TOKEN"].strip()
+APP_TOKEN: str = CONFIG["APP_TOKEN"].strip()
 CATEGORIA_CONTRATACAO_IDS: list[str] = [
     cat_id.strip() for cat_id in CONFIG["CATEGORIA_CONTRATACAO_IDS"].split(",")
 ]
@@ -226,16 +226,27 @@ class VerdanadeskAutomator:
     # --- Sessão & headers ---------------------------------------------------
 
     def _iniciar_sessao(self) -> str:
-        """Autentica na API do Verdanadesk e retorna o ``session_token``."""
-        url = f"{VERDANADESK_URL}/initSession"
-        headers = {"App-Token": APP_TOKEN, "Authorization": f"user_token {USER_TOKEN}"}
-        response = requests.get(url, headers=headers, timeout=HTTP_TIMEOUT)
-        response.raise_for_status()
-        token: Optional[str] = response.json().get("session_token")
-        if not token:
-            raise RuntimeError("API não retornou session_token na resposta de initSession.")
-        logger.info("Sessão iniciada com sucesso no Verdanadesk.")
-        return token
+            """Autentica na API do Verdanadesk e retorna o ``session_token``."""
+            url = f"{VERDANADESK_URL}/initSession"
+            headers = {
+                "App-Token": APP_TOKEN, 
+                "Authorization": f"user_token {USER_TOKEN}",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            }
+            response = requests.get(url, headers=headers, timeout=HTTP_TIMEOUT)
+            
+            # --- BLOCO DE DIAGNÓSTICO PROFUNDO ---
+            if response.status_code != 200:
+                logger.critical("Falha na autenticação! Código: %s | Resposta do Servidor: %s", 
+                                response.status_code, response.text)
+                response.raise_for_status()
+            # ------------------------------------------
+
+            token: Optional[str] = response.json().get("session_token")
+            if not token:
+                raise RuntimeError("API não retornou session_token na resposta de initSession.")
+            logger.info("Sessão iniciada com sucesso no Verdanadesk.")
+            return token
 
     def _atualizar_headers(self) -> None:
         """Reconstrói os headers padrão com o session_token atual."""
@@ -369,6 +380,7 @@ def main() -> None:
 
     while True:
         try:
+            print("Buscando novos chamados...")
             chamados = automator.buscar_novos_chamados()
             if chamados:
                 logger.info("%d chamado(s) novo(s) encontrado(s).", len(chamados))
@@ -378,7 +390,7 @@ def main() -> None:
             logger.error("Erro de rede no ciclo de polling: %s", exc)
         except Exception as exc:
             logger.critical("Erro inesperado no ciclo de polling: %s", exc, exc_info=True)
-
+            
         time.sleep(INTERVALO_POLLING)
 
 
