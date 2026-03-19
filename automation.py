@@ -380,7 +380,7 @@ def main() -> None:
 
     while True:
         try:
-            logger.info("Sessão iniciada com sucesso no Verdanadesk.")
+            logger.info("Buscando novos chamados...")
             chamados = automator.buscar_novos_chamados()
             if chamados:
                 logger.info("%d chamado(s) novo(s) encontrado(s).", len(chamados))
