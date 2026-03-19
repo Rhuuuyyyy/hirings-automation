@@ -380,7 +380,7 @@ def main() -> None:
 
     while True:
         try:
-            print("Buscando novos chamados...")
+            logger.info("Sessão iniciada com sucesso no Verdanadesk.")
             chamados = automator.buscar_novos_chamados()
             if chamados:
                 logger.info("%d chamado(s) novo(s) encontrado(s).", len(chamados))
@@ -390,7 +390,7 @@ def main() -> None:
             logger.error("Erro de rede no ciclo de polling: %s", exc)
         except Exception as exc:
             logger.critical("Erro inesperado no ciclo de polling: %s", exc, exc_info=True)
-            
+
         time.sleep(INTERVALO_POLLING)
 
 
