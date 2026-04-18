@@ -36,41 +36,56 @@ DEPENDENCIAS = [
 VENV_DIR = ".venv"
 
 
-def _no_ambiente_virtual() -> bool:
+def _em_ambiente_virtual() -> bool:
     """Verifica se o script está rodando dentro de um ambiente virtual."""
     return sys.prefix != sys.base_prefix
 
 
+def _dependencias_instaladas() -> bool:
+    """Tenta importar as bibliotecas essenciais para verificar se já estão instaladas."""
+    try:
+        import requests
+        import pydantic
+        import dotenv
+        return True
+    except ImportError:
+        return False
+
+
 def _configurar_e_reiniciar() -> None:
-    """Cria o ambiente virtual, instala as bibliotecas e reinicia o script."""
-    logger.info("⚙️  Ambiente virtual não detectado. Iniciando configuração automática...")
+    """Cria o ambiente virtual (se necessário), instala dependências e reinicia."""
+    em_venv = _em_ambiente_virtual()
+    
+    if not em_venv:
+        logger.info("⚙️  Ambiente virtual não detectado. Iniciando configuração automática...")
+        # 1. Criar o .venv se não existir
+        if not os.path.exists(VENV_DIR):
+            logger.info("📦 Criando a pasta do ambiente virtual (%s)...", VENV_DIR)
+            venv.create(VENV_DIR, with_pip=True)
 
-    # 1. Criar o .venv se não existir
-    if not os.path.exists(VENV_DIR):
-        logger.info("📦 Criando a pasta do ambiente virtual (%s)...", VENV_DIR)
-        venv.create(VENV_DIR, with_pip=True)
-
-    # 2. Descobrir o caminho do Python dentro do .venv (Windows vs Linux/Mac)
-    if os.name == "nt":
-        venv_python = os.path.join(VENV_DIR, "Scripts", "python.exe")
+        # 2. Descobrir o caminho do Python dentro do .venv (Windows vs Linux/Mac)
+        if os.name == "nt":
+            python_exe = os.path.join(VENV_DIR, "Scripts", "python.exe")
+        else:
+            python_exe = os.path.join(VENV_DIR, "bin", "python")
     else:
-        venv_python = os.path.join(VENV_DIR, "bin", "python")
+        logger.info("⚙️  Ambiente virtual detectado, mas faltam bibliotecas. Baixando...")
+        python_exe = sys.executable
 
     # 3. Atualizar pip e instalar dependências
     logger.info("⬇️  Instalando dependências necessárias. Isso pode levar alguns segundos...")
     try:
-        subprocess.check_call([venv_python, "-m", "pip", "install", "--upgrade", "pip", "-q"])
-        subprocess.check_call([venv_python, "-m", "pip", "install", "-q"] + DEPENDENCIAS)
-    except subprocess.CalledProcessError as exc:
+        subprocess.check_call([python_exe, "-m", "pip", "install", "--upgrade", "pip", "-q"])
+        subprocess.check_call([python_exe, "-m", "pip", "install", "-q"] + DEPENDENCIAS)
+    except subprocess.CalledProcessError:
         logger.critical("❌ Erro ao instalar dependências. Verifique sua conexão com a internet.")
         sys.exit(1)
 
-    logger.info("🚀 Configuração concluída! Reiniciando dentro do ambiente virtual...\n")
+    logger.info("🚀 Configuração concluída! Reiniciando a automação...\n")
     logger.info("-" * 60)
 
-    # 4. Reiniciar o próprio script usando o Python do ambiente virtual recém-criado
-    # Isso fará com que a próxima execução passe pelo "if _no_ambiente_virtual()"
-    sys.exit(subprocess.run([venv_python] + sys.argv).returncode)
+    # 4. Reiniciar o próprio script usando o Python correto
+    sys.exit(subprocess.run([python_exe] + sys.argv).returncode)
 
 
 def _auditar_configuracoes() -> None:
@@ -99,12 +114,12 @@ def _auditar_configuracoes() -> None:
 
 def main() -> None:
     """Ponto de entrada principal."""
-    # Passo 1: Autoconfiguração (Se não estiver no .venv, ele configura e reinicia)
-    if not _no_ambiente_virtual():
+    # Passo 1: Autoconfiguração (Se as dependências não existem, instala e reinicia)
+    if not _dependencias_instaladas():
         _configurar_e_reiniciar()
-        return  # O script original para aqui, pois o subprocesso assume o controle
+        return  # O script para aqui na primeira vez, pois o subprocesso assume
 
-    # Passo 2: Auditoria de segurança (Ocorre já dentro do .venv)
+    # Passo 2: Auditoria de segurança (Ocorre com dependências prontas)
     _auditar_configuracoes()
     
     # Passo 3: Importação e Execução Segura
@@ -116,7 +131,7 @@ def main() -> None:
         automation.main()
         
     except ModuleNotFoundError as exc:
-        logger.critical("Falha ao encontrar módulos da automação: %s", exc)
+        logger.critical("❌ Falha ao encontrar módulos da automação: %s", exc)
         sys.exit(1)
     except KeyboardInterrupt:
         print("") # Quebra de linha limpa
