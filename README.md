@@ -1,6 +1,6 @@
 # hirings-automation
 
-🤖 **Automação de Pedidos de Contratação** — Verdanadesk/GLPI + LLM
+**Automação de Pedidos de Contratação** — Verdanadesk/GLPI + LLM
 
 ---
 
