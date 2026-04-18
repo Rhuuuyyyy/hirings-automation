@@ -2,7 +2,7 @@
 hirings-automation — Worker de automação de chamados de contratação.
 
 Pipeline ETL (Extract→Transform→Load) que monitora filas ITSM no Verdanadesk/GLPI,
-extrai dados de chamados via LLM (OpenAI), aplica regras de negócio Dexian e devolve
+extrai dados de chamados via LLM (Google Gemini), aplica regras de negócio Dexian e devolve
 um template padronizado em inglês como acompanhamento privado.
 """
 
@@ -18,7 +18,7 @@ from typing import Optional
 import requests
 from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
@@ -40,7 +40,7 @@ _REQUIRED_ENV_VARS: list[str] = [
     "VERDANADESK_URL",
     "USER_TOKEN",
     "APP_TOKEN",
-    "OPENAI_API_KEY",
+    "GOOGLE_API_KEY",
     "CATEGORIA_CONTRATACAO_IDS",
 ]
 
@@ -68,7 +68,7 @@ def _carregar_configuracao() -> dict[str, str]:
         )
         sys.exit(1)
 
-    os.environ["OPENAI_API_KEY"] = config["OPENAI_API_KEY"]
+    os.environ["GOOGLE_API_KEY"] = config["GOOGLE_API_KEY"]
     return config
 
 
@@ -267,7 +267,7 @@ class VerdanadeskAutomator:
     @staticmethod
     def _criar_extrator_chain():
         """Constrói a chain LangChain (Prompt → LLM → Structured Output)."""
-        llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
         return ChatPromptTemplate.from_messages([
             ("system", "Extraia os dados do chamado de contratação de TI seguindo estritamente o esquema JSON."),
             ("human", "{texto}"),

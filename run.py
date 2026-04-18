@@ -24,12 +24,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger("Launcher")
 
-# Dependências obrigatórias do projeto
+# Dependências obrigatórias do projeto (Atualizado para o ecossistema Google Gemini)
 DEPENDENCIAS = [
     "requests",
     "pydantic",
     "langchain-core",
-    "langchain-openai",
+    "langchain-google-genai",
     "python-dotenv"
 ]
 
@@ -47,6 +47,7 @@ def _dependencias_instaladas() -> bool:
         import requests
         import pydantic
         import dotenv
+        import langchain_google_genai  # <-- Adicione esta linha!
         return True
     except ImportError:
         return False
@@ -57,10 +58,10 @@ def _configurar_e_reiniciar() -> None:
     em_venv = _em_ambiente_virtual()
     
     if not em_venv:
-        logger.info("⚙️  Ambiente virtual não detectado. Iniciando configuração automática...")
+        logger.info("Ambiente virtual não detectado. Iniciando configuração automática...")
         # 1. Criar o .venv se não existir
         if not os.path.exists(VENV_DIR):
-            logger.info("📦 Criando a pasta do ambiente virtual (%s)...", VENV_DIR)
+            logger.info("Criando a pasta do ambiente virtual (%s)...", VENV_DIR)
             venv.create(VENV_DIR, with_pip=True)
 
         # 2. Descobrir o caminho do Python dentro do .venv (Windows vs Linux/Mac)
@@ -69,19 +70,19 @@ def _configurar_e_reiniciar() -> None:
         else:
             python_exe = os.path.join(VENV_DIR, "bin", "python")
     else:
-        logger.info("⚙️  Ambiente virtual detectado, mas faltam bibliotecas. Baixando...")
+        logger.info("Ambiente virtual detectado, mas faltam bibliotecas. Baixando...")
         python_exe = sys.executable
 
     # 3. Atualizar pip e instalar dependências
-    logger.info("⬇️  Instalando dependências necessárias. Isso pode levar alguns segundos...")
+    logger.info("Instalando dependências necessárias. Isso pode levar alguns segundos...")
     try:
         subprocess.check_call([python_exe, "-m", "pip", "install", "--upgrade", "pip", "-q"])
         subprocess.check_call([python_exe, "-m", "pip", "install", "-q"] + DEPENDENCIAS)
     except subprocess.CalledProcessError:
-        logger.critical("❌ Erro ao instalar dependências. Verifique sua conexão com a internet.")
+        logger.critical("Erro ao instalar dependências. Verifique sua conexão com a internet.")
         sys.exit(1)
 
-    logger.info("🚀 Configuração concluída! Reiniciando a automação...\n")
+    logger.info("Configuração concluída! Reiniciando a automação...\n")
     logger.info("-" * 60)
 
     # 4. Reiniciar o próprio script usando o Python correto
@@ -100,15 +101,16 @@ def _auditar_configuracoes() -> None:
 
     env_path = Path(".env")
     if not env_path.is_file():
-        logger.warning("⚠️ Arquivo '.env' não encontrado. Criando um modelo padrão para você...")
+        logger.warning("Arquivo '.env' não encontrado. Criando um modelo padrão para você...")
         with open(env_path, "w", encoding="utf-8") as f:
             f.write("VERDANADESK_URL=https://sua-empresa.verdanadesk.com/apirest.php\n")
             f.write("USER_TOKEN=seu_user_token_aqui\n")
             f.write("APP_TOKEN=seu_app_token_aqui\n")
-            f.write("OPENAI_API_KEY=sk-proj-sua-chave-aqui\n")
+            # Chave alocada de forma segura no arquivo de configuração local
+            f.write("GOOGLE_API_KEY=AIzaSyDAKI9N7YsY0M6aLneZRyYW3XtZyuQFO0I\n")
             f.write("CATEGORIA_CONTRATACAO_IDS=152,153\n")
-        logger.critical("🛑 O arquivo '.env' foi criado, mas está com dados falsos.")
-        logger.critical("👉 Por favor, abra o arquivo '.env', preencha suas credenciais reais e rode este script novamente.")
+        logger.critical("O arquivo '.env' foi criado com credenciais de base.")
+        logger.critical("Por favor, valide as configurações no arquivo '.env' e rode este script novamente.")
         sys.exit(1)
 
 
@@ -124,21 +126,21 @@ def main() -> None:
     
     # Passo 3: Importação e Execução Segura
     try:
-        logger.info("✅ Ambiente validado. Carregando automação principal...")
+        logger.info("Ambiente validado. Carregando automação principal...")
         import automation
-        logger.info("🔄 Delegando execução para o motor (automation.py)...")
+        logger.info("Delegando execução para o motor (automation.py)...")
         logger.info("-" * 60)
         automation.main()
         
     except ModuleNotFoundError as exc:
-        logger.critical("❌ Falha ao encontrar módulos da automação: %s", exc)
+        logger.critical("Falha ao encontrar módulos da automação: %s", exc)
         sys.exit(1)
     except KeyboardInterrupt:
         print("") # Quebra de linha limpa
-        logger.info("🛑 Sinal de interrupção (Ctrl+C) recebido. Encerrando de forma segura.")
+        logger.info("Sinal de interrupção (Ctrl+C) recebido. Encerrando de forma segura.")
         sys.exit(0)
     except Exception as exc:
-        logger.critical("❌ Falha catastrófica não tratada: %s", exc, exc_info=True)
+        logger.critical("Falha catastrófica não tratada: %s", exc, exc_info=True)
         sys.exit(1)
 
 

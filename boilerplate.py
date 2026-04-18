@@ -1,39 +1,68 @@
-import os
-import time
+"""
+Boilerplate Universal para Bots GLPI.
+
+Este arquivo atua como um template estrutural para o desenvolvimento de
+novas automacoes ETL (Extract, Transform, Load) integradas ao GLPI ITSM.
+Ele isola a infraestrutura de rede e autenticacao, permitindo que o 
+desenvolvedor foque exclusivamente na definicao do contrato de dados e 
+na logica de negocio.
+"""
+
 import logging
+import os
+import sys
+import time
+from typing import Any
+
 import requests
-from typing import Optional, Any
 from dotenv import load_dotenv
 
-# Dependências de IA / Extração
-from pydantic import BaseModel, Field
-from langchain_openai import ChatOpenAI
+# Dependencias de IA / Extracao (Atualizado para o ecossistema Google Gemini)
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_google_genai import ChatGoogleGenerativeAI
+from pydantic import BaseModel, Field
 
 # ============================================================================
-# --- BLOCO 1: CONFIGURAÇÃO E INFRAESTRUTURA INICIAL ---
+# --- BLOCO 1: CONFIGURACAO E INFRAESTRUTURA INICIAL ---
 # ============================================================================
 
-# Carrega as variáveis de ambiente
-load_dotenv()
-
-# Configuração de Logging robusta
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("GLPI_BotTemplate")
 
-# Validação de variáveis críticas
-REQUIRED_ENVS = ["GLPI_URL", "GLPI_APP_TOKEN", "GLPI_USER_TOKEN", "OPENAI_API_KEY"]
-for env in REQUIRED_ENVS:
-    if not os.getenv(env):
-        logger.error(f"Variável de ambiente obrigatória não encontrada: {env}")
-        exit(1)
+HTTP_TIMEOUT: int = 30  # Timeout global para evitar travamento de threads
 
-GLPI_URL = os.getenv("GLPI_URL", "").rstrip("/")
-POLLING_INTERVAL = int(os.getenv("POLLING_INTERVAL", 60))
+
+def carregar_configuracoes() -> dict[str, str]:
+    """
+    Carrega e valida todas as variaveis de ambiente obrigatorias.
+    Executa a validacao no momento da inicializacao (Fail-Fast).
+    """
+    load_dotenv()
+    
+    config = {}
+    vars_obrigatorias = ["GLPI_URL", "GLPI_APP_TOKEN", "GLPI_USER_TOKEN", "GOOGLE_API_KEY"]
+    vars_ausentes = []
+
+    for var in vars_obrigatorias:
+        valor = os.getenv(var)
+        if not valor:
+            vars_ausentes.append(var)
+        else:
+            config[var] = valor.rstrip("/") if var == "GLPI_URL" else valor
+
+    if vars_ausentes:
+        logger.critical(
+            "Falha critica: Variaveis de ambiente obrigatorias nao encontradas: %s",
+            ", ".join(vars_ausentes)
+        )
+        sys.exit(1)
+
+    config["POLLING_INTERVAL"] = os.getenv("POLLING_INTERVAL", "60")
+    return config
 
 
 # ============================================================================
@@ -42,101 +71,108 @@ POLLING_INTERVAL = int(os.getenv("POLLING_INTERVAL", 60))
 
 class DadosExtraidosTemplate(BaseModel):
     """
-    TODO: INSIRA SUA LÓGICA DE EXTRAÇÃO AQUI
-    Altere os campos abaixo para representar exatamente o que você espera que o
-    LLM extraia do conteúdo do chamado.
+    [TODO]: INSIRA SUA LOGICA DE EXTRACAO AQUI.
+    Defina os campos estritos que o LLM deve extrair do texto do chamado.
+    Utilize o atributo 'description' do Field para instruir a IA.
     """
-    categoria_identificada: str = Field(description="A categoria do problema relatado pelo usuário.")
-    urgencia_sugerida: Optional[int] = Field(None, description="Nível de urgência de 1 a 5, se detectado.")
-    resumo_problema: str = Field(description="Um resumo de 1 linha do problema para adicionar ao acompanhamento.")
-    # ex: nome_colaborador: str = Field(description="Nome do colaborador que precisa de acesso")
+    categoria_identificada: str = Field(
+        description="A categoria do problema relatado pelo usuario."
+    )
+    urgencia_sugerida: int | None = Field(
+        default=None, 
+        description="Nivel de urgencia de 1 a 5, se detectado explicitamente."
+    )
+    resumo_problema: str = Field(
+        description="Um resumo de 1 linha do problema para adicionar ao acompanhamento."
+    )
 
 
-# Prompt Genérico configurável
 SYSTEM_PROMPT = """
-Você é um assistente de triagem de TI (ITSM). 
-Analise o conteúdo do chamado a seguir e extraia as informações essenciais
-de acordo com a estrutura de dados solicitada.
+Voce e um assistente de triagem de TI (ITSM) focado e analitico.
+Analise o conteudo do chamado a seguir e extraia as informacoes essenciais
+obedecendo estritamente a estrutura de dados solicitada.
 
-Conteúdo do Chamado:
+Conteudo do Chamado:
 {conteudo_chamado}
 """
 
 
 # ============================================================================
-# --- BLOCO 3: REGRA DE NEGÓCIO (MODIFIQUE AQUI) ---
+# --- BLOCO 3: REGRA DE NEGOCIO (MODIFIQUE AQUI) ---
 # ============================================================================
 
 class ProcessadorDeChamado:
     """
-    Classe responsável por aplicar as regras de negócio de cada automação específica.
+    Classe de Dominio responsavel por aplicar as regras de negocio 
+    especificas desta automacao apos a extracao dos dados.
     """
-    def __init__(self, glpi_client: 'ClienteGLPI'):
+    def __init__(self, glpi_client: 'ClienteGLPI') -> None:
         self.glpi = glpi_client
-        self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0) # Altere o modelo se necessário
         self.extrator = self._criar_extrator_chain()
 
-    def _criar_extrator_chain(self) -> Any:
-        """Cria o pipeline do LangChain para extração estruturada."""
+    @staticmethod
+    def _criar_extrator_chain() -> Any:
+        """Configura e retorna o pipeline do LangChain para extracao estruturada via Gemini."""
+        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
         prompt = ChatPromptTemplate.from_template(SYSTEM_PROMPT)
-        # Associa o LLM ao Pydantic model (Contrato de Dados)
-        extrator_estruturado = self.llm.with_structured_output(DadosExtraidosTemplate)
-        return prompt | extrator_estruturado
+        return prompt | llm.with_structured_output(DadosExtraidosTemplate)
 
-    def processar(self, chamado: dict) -> None:
+    def processar(self, chamado: dict[str, Any]) -> None:
         """
-        TODO: INSIRA SUA LÓGICA DE TRANSFORMAÇÃO AQUI
-        Este método é orquestrador da sua regra de negócio para cada chamado.
+        [TODO]: INSIRA SUA LOGICA DE TRANSFORMACAO AQUI.
+        Metodo orquestrador que une os dados extraidos com as acoes na API.
         """
         ticket_id = chamado.get("id")
         conteudo_bruto = chamado.get("content", "")
         
-        logger.info(f"Processando chamado #{ticket_id}...")
+        if not ticket_id or not conteudo_bruto:
+            logger.warning("Chamado invalido ou sem conteudo recebido. Ignorando.")
+            return
+
+        logger.info("Iniciando processamento do chamado #%s", ticket_id)
 
         try:
-            # 1. Extração com LLM
-            logger.info("Extraindo dados com LLM...")
-            dados_extraidos: DadosExtraidosTemplate = self.extrator.invoke({"conteudo_chamado": conteudo_bruto})
-            logger.info(f"Dados extraídos: {dados_extraidos.model_dump()}")
-
-            # 2. Avaliação de Regra de Negócio (Exemplo)
-            if dados_extraidos.categoria_identificada == "Ignorar":
-                logger.info(f"Chamado #{ticket_id} ignorado pela regra de negócio.")
+            # 1. Extracao
+            logger.debug("Extraindo dados estruturados via LLM...")
+            dados: DadosExtraidosTemplate = self.extrator.invoke({"conteudo_chamado": conteudo_bruto})
+            
+            # 2. Avaliacao de Regras
+            if dados.categoria_identificada.lower() == "ignorar":
+                logger.info("Chamado #%s classificado para ser ignorado.", ticket_id)
                 return
 
-            # 3. Ações no GLPI (Modularizado)
-            # Exemplo: Adiciona um acompanhamento privado com os dados extraídos
-            mensagem = f"Análise IA Concluída. Resumo: {dados_extraidos.resumo_problema}"
+            # 3. Carga (Load) / Acoes
+            mensagem = f"Analise IA Concluida. Resumo: {dados.resumo_problema}"
             self.glpi.adicionar_acompanhamento(ticket_id=ticket_id, conteudo=mensagem, privado=True)
-
-            # Exemplo: Atualiza status para 'Em Atendimento' (2)
             self.glpi.atualizar_status(ticket_id=ticket_id, novo_status=2)
             
-            logger.info(f"Chamado #{ticket_id} processado com sucesso!")
+            logger.info("Chamado #%s processado e finalizado com sucesso.", ticket_id)
 
-        except Exception as e:
-            logger.error(f"Erro ao processar a regra de negócio do chamado #{ticket_id}: {str(e)}", exc_info=True)
+        except Exception as exc:
+            logger.error("Falha na regra de negocio do chamado #%s: %s", ticket_id, exc, exc_info=True)
 
 
 # ============================================================================
-# --- BLOCO 4: CORE DO GLPI (NÃO MEXA) ---
+# --- BLOCO 4: CORE DO GLPI (NAO MODIFIQUE) ---
 # ============================================================================
 
 class ClienteGLPI:
     """
-    Engine de comunicação com o GLPI. Resolve autenticação, renovação de sessão e chamadas REST.
+    Cliente REST robusto para comunicacao com o GLPI.
+    Gerencia automaticamente sessoes, tokens, cabecalhos e retentativas em caso de 401.
     """
-    def __init__(self, base_url: str, app_token: str, user_token: str):
+    def __init__(self, base_url: str, app_token: str, user_token: str) -> None:
         self.base_url = base_url
         self.app_token = app_token
         self.user_token = user_token
-        self.session_token: Optional[str] = None
-        self.session = requests.Session()
+        self.session_token: str | None = None
         
+        self.session = requests.Session()
         self._iniciar_sessao()
 
     def _atualizar_headers(self) -> None:
-        """Atualiza os cabeçalhos da requisição HTTP."""
+        """Garante a higienizacao e injecao dos cabecalhos corretos."""
+        self.session.headers.clear()
         self.session.headers.update({
             "App-Token": self.app_token,
             "Content-Type": "application/json"
@@ -145,53 +181,69 @@ class ClienteGLPI:
             self.session.headers.update({"Session-Token": self.session_token})
 
     def _iniciar_sessao(self) -> None:
-        """Autentica na API do GLPI usando o User-Token."""
+        """Executa a autenticacao primaria via User-Token."""
         url = f"{self.base_url}/apirest.php/initSession"
         self._atualizar_headers()
+        
+        # O User-Token so e enviado no header de Authorization durante o initSession
         headers_auth = {"Authorization": f"user_token {self.user_token}"}
         
-        response = self.session.get(url, headers=headers_auth)
-        response.raise_for_status()
-        
-        self.session_token = response.json().get("session_token")
-        self._atualizar_headers()
-        logger.info("Sessão do GLPI iniciada com sucesso.")
+        try:
+            response = self.session.get(url, headers=headers_auth, timeout=HTTP_TIMEOUT)
+            
+            if not response.ok:
+                logger.error("Falha no login. Status: %s | Resposta: %s", response.status_code, response.text)
+                
+            response.raise_for_status()
+            
+            self.session_token = response.json().get("session_token")
+            self._atualizar_headers()
+            logger.info("Sessao autenticada com o GLPI estabelecida com sucesso.")
+            
+        except requests.exceptions.RequestException as exc:
+            logger.critical("Erro critico ao contatar o endpoint de autenticacao: %s", exc)
+            sys.exit(1)
 
     def _renovar_sessao(self) -> None:
-        """Renova a sessão caso o token tenha expirado."""
-        logger.warning("Sessão expirada ou inválida. Tentando renovar...")
+        """Invalida o token atual e forca uma nova autenticacao."""
+        logger.warning("Token de sessao expirado ou invalido. Iniciando ciclo de renovacao...")
         self.session_token = None
         self._iniciar_sessao()
 
     def _fazer_requisicao(self, metodo: str, endpoint: str, **kwargs) -> requests.Response:
-        """Wrapper interno para lidar com 401 e reconexão automática."""
+        """Wrapper resiliente que trata expiracao de sessao (401/403) automaticamente."""
         url = f"{self.base_url}/apirest.php/{endpoint}"
+        kwargs.setdefault("timeout", HTTP_TIMEOUT)
         
         response = self.session.request(metodo, url, **kwargs)
         
-        # Se for 401 (Unauthorized), renova a sessão e tenta novamente UMA vez
         if response.status_code in (401, 403):
             self._renovar_sessao()
             response = self.session.request(metodo, url, **kwargs)
             
+        if not response.ok:
+            logger.error("Requisicao falhou [%s %s]. Status: %s | Corpo: %s", 
+                         metodo, endpoint, response.status_code, response.text)
+            
         response.raise_for_status()
         return response
 
-    def buscar_chamados_pendentes(self) -> list[dict]:
-        """Busca chamados que aguardam triagem (ex: status 1 - Novo)."""
-        # Exemplo de query para status=1 (Novo). Ajuste o searchCriteria conforme necessário.
+    def buscar_chamados_pendentes(self) -> list[dict[str, Any]]:
+        """
+        Retorna a lista de chamados que atendem aos criterios da fila de trabalho.
+        Por padrao, busca chamados no status 1 (Novo). Ajuste os criterios conforme necessario.
+        """
         endpoint = "search/Ticket?criteria[0][field]=12&criteria[0][searchtype]=equals&criteria[0][value]=1"
         try:
             response = self._fazer_requisicao("GET", endpoint)
             dados = response.json()
-            # Retorna a lista de dados. O GLPI Search retorna em 'data'
             return dados.get("data", [])
-        except Exception as e:
-            logger.error(f"Erro ao buscar chamados pendentes: {str(e)}")
+        except requests.exceptions.RequestException as exc:
+            logger.error("Falha na varredura da fila de chamados: %s", exc)
             return []
 
     def adicionar_acompanhamento(self, ticket_id: int, conteudo: str, privado: bool = True) -> bool:
-        """Adiciona um follow-up (tarefa/acompanhamento) a um chamado."""
+        """Injeta uma anotacao (follow-up) no chamado especificado."""
         endpoint = f"Ticket/{ticket_id}/ITILFollowup"
         payload = {
             "input": {
@@ -203,17 +255,14 @@ class ClienteGLPI:
         }
         try:
             self._fazer_requisicao("POST", endpoint, json=payload)
-            logger.debug(f"Acompanhamento adicionado ao ticket {ticket_id}.")
+            logger.debug("Acompanhamento gravado no ticket #%s.", ticket_id)
             return True
-        except Exception as e:
-            logger.error(f"Erro ao adicionar acompanhamento no ticket {ticket_id}: {str(e)}")
+        except requests.exceptions.RequestException as exc:
+            logger.error("Falha ao injetar acompanhamento no ticket #%s: %s", ticket_id, exc)
             return False
 
     def atualizar_status(self, ticket_id: int, novo_status: int) -> bool:
-        """
-        Atualiza o status de um chamado.
-        Status comuns: 1 (Novo), 2 (Em Atendimento), 5 (Resolvido), 6 (Fechado).
-        """
+        """Muta o estado do chamado (ex: 2 = Em Atendimento, 5 = Resolvido)."""
         endpoint = f"Ticket/{ticket_id}"
         payload = {
             "input": {
@@ -222,52 +271,51 @@ class ClienteGLPI:
             }
         }
         try:
-            # Requer HTTP PUT/PATCH para atualização de item
             self._fazer_requisicao("PUT", endpoint, json=payload)
-            logger.info(f"Status do ticket {ticket_id} atualizado para {novo_status}.")
+            logger.info("Status do ticket #%s mutado para o estado %s.", ticket_id, novo_status)
             return True
-        except Exception as e:
-            logger.error(f"Erro ao atualizar status do ticket {ticket_id}: {str(e)}")
+        except requests.exceptions.RequestException as exc:
+            logger.error("Falha ao mutar status do ticket #%s: %s", ticket_id, exc)
             return False
 
 
 # ============================================================================
-# --- BLOCO 5: WORKER POLLING (CORE) ---
+# --- BLOCO 5: WORKER POLLING (ENTRYPOINT) ---
 # ============================================================================
 
-def main():
-    logger.info("Iniciando GLPI Automation Worker...")
+def main() -> None:
+    """Ponto de entrada do Worker. Executa o laco de repeticao infinito."""
+    config = carregar_configuracoes()
+    polling_interval = int(config["POLLING_INTERVAL"])
     
-    # Inicializa serviços Core
-    glpi = ClienteGLPI(
-        base_url=os.getenv("GLPI_URL"),
-        app_token=os.getenv("GLPI_APP_TOKEN"),
-        user_token=os.getenv("GLPI_USER_TOKEN")
+    logger.info("Inicializando Worker GLPI com ciclo de varredura de %s segundos.", polling_interval)
+    
+    glpi_client = ClienteGLPI(
+        base_url=config["GLPI_URL"],
+        app_token=config["GLPI_APP_TOKEN"],
+        user_token=config["GLPI_USER_TOKEN"]
     )
     
-    # Inicializa Regras de Negócio
-    processador = ProcessadorDeChamado(glpi_client=glpi)
+    processador = ProcessadorDeChamado(glpi_client=glpi_client)
 
-    # Loop Infinito de Polling
     while True:
         try:
-            chamados_pendentes = glpi.buscar_chamados_pendentes()
+            chamados_pendentes = glpi_client.buscar_chamados_pendentes()
             
             if chamados_pendentes:
-                logger.info(f"[{len(chamados_pendentes)}] chamados encontrados para processamento.")
-                
+                logger.info("Fila contem %d chamado(s) aguardando processamento.", len(chamados_pendentes))
                 for chamado in chamados_pendentes:
                     processador.processar(chamado)
             else:
-                logger.debug("Nenhum chamado pendente no momento.")
+                logger.debug("Fila de trabalho vazia.")
 
-        except requests.exceptions.RequestException as req_err:
-            logger.error(f"Erro de rede durante o ciclo: {str(req_err)}")
-        except Exception as e:
-            logger.critical(f"Erro inesperado no loop principal: {str(e)}", exc_info=True)
+        except requests.exceptions.RequestException as exc:
+            logger.error("Anomalia de rede durante o ciclo de varredura: %s", exc)
+        except Exception as exc:
+            logger.critical("Excecao nao tratada no laco principal: %s", exc, exc_info=True)
             
-        logger.debug(f"Aguardando {POLLING_INTERVAL} segundos para o próximo ciclo...")
-        time.sleep(POLLING_INTERVAL)
+        time.sleep(polling_interval)
+
 
 if __name__ == "__main__":
     main()
