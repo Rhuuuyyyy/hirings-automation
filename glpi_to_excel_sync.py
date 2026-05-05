@@ -267,20 +267,12 @@ class ClienteGLPI:
             offset = 0
             while True:
                 partes = [
-                    # Filtro de categoria (field 7 = Categoria do chamado)
+                    # Filtro de categoria no servidor (field 7 = Categoria do chamado)
+                    # Filtro de status é feito em Python após receber os dados,
+                    # pois o searchtype=notequals causa body vazio nesta versão do GLPI.
                     "criteria[0][field]=7",
                     "criteria[0][searchtype]=equals",
                     f"criteria[0][value]={cat_id}",
-                    # AND: excluir status Solucionado (5)
-                    "criteria[1][link]=AND",
-                    "criteria[1][field]=12",
-                    "criteria[1][searchtype]=notequals",
-                    "criteria[1][value]=5",
-                    # AND: excluir status Fechado (6)
-                    "criteria[2][link]=AND",
-                    "criteria[2][field]=12",
-                    "criteria[2][searchtype]=notequals",
-                    "criteria[2][value]=6",
                     # Campos obrigatórios na resposta
                     "forcedisplay[0]=2",   # ID do chamado
                     "forcedisplay[1]=1",   # Título
@@ -313,12 +305,21 @@ class ClienteGLPI:
                     items: list[dict] = dados.get("data", [])
                     totalcount: int = dados.get("totalcount", 0)
 
+                    ativos_pagina = 0
                     for item in items:
                         tid = item.get("2") or item.get("id")
-                        if tid is not None:
+                        try:
+                            status_id = int(item.get("12") or item.get("status") or 0)
+                        except (ValueError, TypeError):
+                            status_id = 0
+                        if tid is not None and status_id in STATUSES_ATIVOS:
                             todos[int(tid)] = item
+                            ativos_pagina += 1
 
-                    logger.info("Categoria %s: %d/%d chamados.", cat_id, offset + len(items), totalcount)
+                    logger.info(
+                        "Categoria %s: %d/%d recebidos | %d ativos nesta página.",
+                        cat_id, offset + len(items), totalcount, ativos_pagina,
+                    )
 
                     if not items or offset + len(items) >= totalcount:
                         break
