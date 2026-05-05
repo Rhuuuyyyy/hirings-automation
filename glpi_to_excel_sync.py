@@ -235,82 +235,75 @@ class ClienteGLPI:
     # --- Endpoints de negócio -----------------------------------------------
 
     def buscar_chamados_ativos(self) -> list[dict[str, Any]]:
-        """Busca chamados via GET /Ticket com paginação e filtra ativos (status 1-4).
+        """Busca chamados ativos via Search API com filtro de status no servidor.
 
-        Usa páginas de 50 itens para evitar crash de memória no servidor PHP.
-        Lê o header Content-Range para saber o total e parar a paginação.
+        Usa a Search API (filtra status 1-4 no GLPI) em vez de GET /Ticket
+        (que retorna todos os tickets e filtra no cliente — lento para bases grandes).
+        Paginação de 200 por vez com parada via totalcount da resposta.
+        Colchetes são literais na URL porque PHP não parseia %5B/%5D como arrays.
         """
-        PAGE_SIZE = 50
-        todos: list[dict] = []
+        PAGE_SIZE = 200
         offset = 0
+        todos: list[dict] = []
 
         while True:
-            fim = offset + PAGE_SIZE - 1
-            url = f"{self.base_url}/Ticket?range={offset}-{fim}"
-            logger.info("Buscando página: %s", url)
+            partes: list[str] = []
+            for i, status in enumerate(sorted(STATUSES_ATIVOS)):
+                if i > 0:
+                    partes.append(f"criteria[{i}][link]=OR")
+                partes.append(f"criteria[{i}][field]=12")
+                partes.append(f"criteria[{i}][searchtype]=equals")
+                partes.append(f"criteria[{i}][value]={status}")
+
+            partes.append(f"range={offset}-{offset + PAGE_SIZE - 1}")
+            url = f"{self.base_url}/search/Ticket?{'&'.join(partes)}"
+            logger.info("Search API (offset=%d): %s", offset, url)
 
             try:
                 response = self._session.get(url, timeout=HTTP_TIMEOUT)
-
                 if response.status_code in (401, 403):
                     self._renovar_sessao()
                     response = self._session.get(url, timeout=HTTP_TIMEOUT)
 
                 logger.info(
-                    "Página %d: HTTP %s | %d bytes | Content-Range: %s",
-                    offset // PAGE_SIZE,
-                    response.status_code,
-                    len(response.content),
-                    response.headers.get("Content-Range", "—"),
+                    "Resposta: HTTP %s | %d bytes",
+                    response.status_code, len(response.content),
                 )
 
-                # 404 significa que não há itens nesse range (além do total)
-                if response.status_code == 404:
-                    break
-
                 if not response.ok:
-                    logger.error("Erro HTTP %s: %.400s", response.status_code, response.text)
+                    logger.error("Erro da Search API: %.400s", response.text)
                     break
 
                 if not response.text.strip():
-                    logger.warning("Body vazio na página %d.", offset // PAGE_SIZE)
+                    logger.warning(
+                        "Search API retornou body vazio. "
+                        "Verifique permissões do perfil GLPI ou tente com filtro de categoria."
+                    )
                     break
 
-                pagina = response.json()
+                dados = response.json()
+                items: list[dict] = dados.get("data", [])
+                totalcount: int = dados.get("totalcount", 0)
 
-                if not isinstance(pagina, list):
-                    logger.warning("Formato inesperado: %s | %.300s", type(pagina).__name__, str(pagina))
+                todos.extend(items)
+                logger.info(
+                    "Recebidos %d/%d chamados ativos.", offset + len(items), totalcount
+                )
+
+                if not items or offset + len(items) >= totalcount:
                     break
-
-                todos.extend(pagina)
-
-                # Content-Range: "0-49/1234" → total de itens no servidor = 1234
-                total_servidor = None
-                cr = response.headers.get("Content-Range", "")
-                if "/" in cr:
-                    try:
-                        total_servidor = int(cr.split("/")[-1])
-                    except ValueError:
-                        pass
-
-                itens_ate_agora = offset + len(pagina)
-                if total_servidor is not None and itens_ate_agora >= total_servidor:
-                    break
-                if len(pagina) < PAGE_SIZE:
-                    break  # Última página (sem Content-Range ou incompleta)
-
                 offset += PAGE_SIZE
 
             except requests.exceptions.RequestException as exc:
-                logger.error("Falha de rede (range %d-%d): %s", offset, fim, exc)
+                logger.error("Falha de rede (offset=%d): %s", offset, exc)
                 break
             except ValueError as exc:
-                logger.error("JSON inválido (range %d-%d): %s | Body: %.200s", offset, fim, exc, response.text)
+                logger.error(
+                    "JSON inválido (offset=%d): %s | Body: %.200s", offset, exc, response.text
+                )
                 break
 
-        ativos = [t for t in todos if t.get("status") in STATUSES_ATIVOS]
-        logger.info("Total buscado: %d chamado(s) | Ativos (status 1-4): %d", len(todos), len(ativos))
-        return ativos
+        return todos
 
     def buscar_nome_usuario(self, user_id: int) -> str:
         """Retorna nome completo do usuário GLPI, com cache em memória."""
@@ -387,41 +380,48 @@ class SincronizadorExcel:
             return False
 
     def _chamado_para_linha(self, chamado: dict) -> dict | None:
-        """Converte um ticket de GET /Ticket (campos nomeados) em linha do DataFrame."""
-        ticket_id_raw = chamado.get("id")
-        if ticket_id_raw is None:
+        """Converte um ticket da API em linha do DataFrame.
+
+        Aceita tanto o formato da Search API (chaves numéricas: "2", "1", "12"…)
+        quanto o da API direta (chaves nomeadas: "id", "name", "status"…).
+        """
+        # ID: chave "2" na Search API, "id" na API direta
+        id_raw = chamado.get("2") or chamado.get("id")
+        if id_raw is None:
             return None
         try:
-            ticket_id = int(ticket_id_raw)
+            ticket_id = int(id_raw)
         except (ValueError, TypeError):
-            logger.debug("Ignorando chamado com ID inválido: %s", ticket_id_raw)
+            logger.debug("ID inválido: %s", id_raw)
             return None
 
-        status_raw = chamado.get("status", 0)
+        # Status
         try:
-            status_id = int(status_raw)
+            status_id = int(chamado.get("12") or chamado.get("status") or 0)
         except (ValueError, TypeError):
             status_id = 0
 
-        # Requerente: campo varia por versão do GLPI
+        # Requerente: "4" na Search API, "_users_id_requester"/"users_id_requester" na direta
         requerente = ""
-        for campo in ("_users_id_requester", "users_id_requester"):
-            val = chamado.get(campo)
-            if val:
-                try:
-                    uid = int(val)
-                    if uid > 0:
-                        requerente = self.glpi.buscar_nome_usuario(uid)
-                except (ValueError, TypeError):
-                    requerente = str(val)
-                break
+        req_raw = chamado.get("4") or chamado.get("_users_id_requester") or chamado.get("users_id_requester")
+        if req_raw:
+            try:
+                uid = int(req_raw)
+                if uid > 0:
+                    requerente = self.glpi.buscar_nome_usuario(uid)
+            except (ValueError, TypeError):
+                requerente = str(req_raw)
 
         return {
             "ID do Chamado": ticket_id,
-            "Título": chamado.get("name", ""),
+            "Título": chamado.get("1") or chamado.get("name") or "",
             "Status": STATUS_MAP.get(status_id, f"Status {status_id}"),
-            "Tempo para Solução (SLA)": _formatar_datetime(chamado.get("time_to_resolve")),
-            "Data de Abertura": _formatar_datetime(chamado.get("date_creation")),
+            "Tempo para Solução (SLA)": _formatar_datetime(
+                chamado.get("17") or chamado.get("time_to_resolve")
+            ),
+            "Data de Abertura": _formatar_datetime(
+                chamado.get("15") or chamado.get("date_creation")
+            ),
             "Requerente": requerente,
         }
 
