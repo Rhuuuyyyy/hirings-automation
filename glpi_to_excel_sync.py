@@ -222,50 +222,60 @@ class ClienteGLPI:
 
     # --- Requisições --------------------------------------------------------
 
-    def _get(self, endpoint: str, params: dict | None = None) -> Any:
+    def _get(self, url_completa: str) -> Any:
         """GET resiliente: renova sessão e retenta uma vez em caso de 401/403."""
-        url = f"{self.base_url}/{endpoint}"
-        response = self._session.get(url, params=params, timeout=HTTP_TIMEOUT)
+        response = self._session.get(url_completa, timeout=HTTP_TIMEOUT)
 
         if response.status_code in (401, 403):
             self._renovar_sessao()
-            response = self._session.get(url, params=params, timeout=HTTP_TIMEOUT)
+            response = self._session.get(url_completa, timeout=HTTP_TIMEOUT)
 
         if not response.ok:
             logger.error(
-                "Requisição falhou [GET /%s]. Status %s: %s",
-                endpoint, response.status_code, response.text[:300],
+                "Requisição falhou [GET %s]. Status %s: %s",
+                url_completa, response.status_code, response.text[:300],
             )
         response.raise_for_status()
+
+        if not response.text.strip():
+            return {}
+
         return response.json()
 
     # --- Endpoints de negócio -----------------------------------------------
 
     def buscar_chamados_ativos(self) -> list[dict[str, Any]]:
-        """Retorna todos os chamados com status ativo (1, 2, 3 ou 4) via Search API."""
-        params: dict[str, Any] = {}
+        """Retorna todos os chamados com status ativo (1, 2, 3 ou 4) via Search API.
 
-        status_list = sorted(STATUSES_ATIVOS)
-        params["criteria[0][field]"] = _FIELD["status"]
-        params["criteria[0][searchtype]"] = "equals"
-        params["criteria[0][value]"] = status_list[0]
+        A query string é montada com colchetes literais (não codificados) porque
+        o PHP só interpreta critérios de array com '[' e ']' literais — não com
+        '%5B' e '%5D' que o requests geraria ao usar params={}.
+        """
+        partes: list[str] = []
 
-        for i, status in enumerate(status_list[1:], start=1):
-            params[f"criteria[{i}][link]"] = "OR"
-            params[f"criteria[{i}][field]"] = _FIELD["status"]
-            params[f"criteria[{i}][searchtype]"] = "equals"
-            params[f"criteria[{i}][value]"] = status
+        for i, status in enumerate(sorted(STATUSES_ATIVOS)):
+            if i > 0:
+                partes.append(f"criteria[{i}][link]=OR")
+            partes.append(f"criteria[{i}][field]={_FIELD['status']}")
+            partes.append(f"criteria[{i}][searchtype]=equals")
+            partes.append(f"criteria[{i}][value]={status}")
 
         for i, field_id in enumerate(_FIELD.values()):
-            params[f"forcedisplay[{i}]"] = field_id
+            partes.append(f"forcedisplay[{i}]={field_id}")
 
-        params["range"] = "0-9999"
+        partes.append("range=0-9999")
+
+        url = f"{self.base_url}/search/Ticket?{'&'.join(partes)}"
+        logger.debug("Search URL: %s", url)
 
         try:
-            dados = self._get("search/Ticket", params=params)
+            dados = self._get(url)
             return dados.get("data", [])
         except requests.exceptions.RequestException as exc:
             logger.error("Falha ao buscar chamados ativos: %s", exc)
+            return []
+        except (ValueError, AttributeError) as exc:
+            logger.error("Resposta inesperada da Search API: %s", exc)
             return []
 
     def buscar_nome_usuario(self, user_id: int) -> str:
@@ -274,7 +284,7 @@ class ClienteGLPI:
             return self._cache_usuarios[user_id]
 
         try:
-            dados = self._get(f"User/{user_id}")
+            dados = self._get(f"{self.base_url}/User/{user_id}")
             firstname = dados.get("firstname", "")
             realname = dados.get("realname", "")
             nome = f"{firstname} {realname}".strip() or dados.get("name", str(user_id))
