@@ -112,16 +112,6 @@ COLUNAS_EXCEL = [
     "Requerente",
 ]
 
-# Field IDs da Search API do GLPI (/search/Ticket)
-# Para verificar na sua instância: GET /listSearchOptions/Ticket
-_FIELD = {
-    "id": "2",
-    "titulo": "1",
-    "status": "12",
-    "data_abertura": "15",
-    "sla": "17",
-    "requerente": "4",
-}
 
 
 # ============================================================================
@@ -245,37 +235,56 @@ class ClienteGLPI:
     # --- Endpoints de negócio -----------------------------------------------
 
     def buscar_chamados_ativos(self) -> list[dict[str, Any]]:
-        """Retorna todos os chamados com status ativo (1, 2, 3 ou 4) via Search API.
+        """Busca chamados via GET /Ticket e filtra ativos (status 1-4) em Python.
 
-        A query string é montada com colchetes literais (não codificados) porque
-        o PHP só interpreta critérios de array com '[' e ']' literais — não com
-        '%5B' e '%5D' que o requests geraria ao usar params={}.
+        Usa o endpoint direto em vez da Search API porque alguns perfis GLPI
+        retornam body vazio na Search API por restrições de permissão ou quirks
+        de versão. O endpoint /Ticket retorna os campos com nomes legíveis
+        (id, name, status, date_creation, time_to_resolve).
         """
-        partes: list[str] = []
-
-        for i, status in enumerate(sorted(STATUSES_ATIVOS)):
-            if i > 0:
-                partes.append(f"criteria[{i}][link]=OR")
-            partes.append(f"criteria[{i}][field]={_FIELD['status']}")
-            partes.append(f"criteria[{i}][searchtype]=equals")
-            partes.append(f"criteria[{i}][value]={status}")
-
-        for i, field_id in enumerate(_FIELD.values()):
-            partes.append(f"forcedisplay[{i}]={field_id}")
-
-        partes.append("range=0-9999")
-
-        url = f"{self.base_url}/search/Ticket?{'&'.join(partes)}"
-        logger.debug("Search URL: %s", url)
+        url = f"{self.base_url}/Ticket?range=0-9999"
+        logger.info("Consultando: %s", url)
 
         try:
-            dados = self._get(url)
-            return dados.get("data", [])
+            response = self._session.get(url, timeout=HTTP_TIMEOUT)
+
+            if response.status_code in (401, 403):
+                self._renovar_sessao()
+                response = self._session.get(url, timeout=HTTP_TIMEOUT)
+
+            logger.info(
+                "Resposta: HTTP %s | %d bytes | Content-Type: %s",
+                response.status_code,
+                len(response.content),
+                response.headers.get("Content-Type", "?"),
+            )
+
+            if not response.ok:
+                logger.error("Erro da API: %s", response.text[:400])
+                response.raise_for_status()
+
+            if not response.text.strip():
+                logger.warning("API retornou body vazio — nenhum chamado visível para este perfil.")
+                return []
+
+            dados = response.json()
+
+            if not isinstance(dados, list):
+                logger.warning(
+                    "Formato inesperado (esperado lista, recebido %s): %.300s",
+                    type(dados).__name__, str(dados),
+                )
+                return []
+
+            ativos = [t for t in dados if t.get("status") in STATUSES_ATIVOS]
+            logger.info("Total recebido: %d | Ativos (status 1-4): %d", len(dados), len(ativos))
+            return ativos
+
         except requests.exceptions.RequestException as exc:
-            logger.error("Falha ao buscar chamados ativos: %s", exc)
+            logger.error("Falha de rede ao buscar chamados: %s", exc)
             return []
-        except (ValueError, AttributeError) as exc:
-            logger.error("Resposta inesperada da Search API: %s", exc)
+        except ValueError as exc:
+            logger.error("JSON inválido na resposta: %s | Body: %.300s", exc, response.text)
             return []
 
     def buscar_nome_usuario(self, user_id: int) -> str:
@@ -353,38 +362,41 @@ class SincronizadorExcel:
             return False
 
     def _chamado_para_linha(self, chamado: dict) -> dict | None:
-        """Converte um registro da Search API em uma linha para o DataFrame."""
-        id_raw = chamado.get(_FIELD["id"]) or chamado.get("id")
-        if id_raw is None:
+        """Converte um ticket de GET /Ticket (campos nomeados) em linha do DataFrame."""
+        ticket_id_raw = chamado.get("id")
+        if ticket_id_raw is None:
             return None
         try:
-            ticket_id = int(id_raw)
+            ticket_id = int(ticket_id_raw)
         except (ValueError, TypeError):
-            logger.debug("Ignorando chamado com ID inválido: %s", id_raw)
+            logger.debug("Ignorando chamado com ID inválido: %s", ticket_id_raw)
             return None
 
-        status_raw = chamado.get(_FIELD["status"], 0)
+        status_raw = chamado.get("status", 0)
         try:
             status_id = int(status_raw)
         except (ValueError, TypeError):
             status_id = 0
-        status_texto = STATUS_MAP.get(status_id, f"Status {status_id}")
 
-        requerente_raw = chamado.get(_FIELD["requerente"], "")
+        # Requerente: campo varia por versão do GLPI
         requerente = ""
-        if requerente_raw:
-            try:
-                requerente = self.glpi.buscar_nome_usuario(int(requerente_raw))
-            except (ValueError, TypeError):
-                # A API já retornou o nome como string (depende da versão do GLPI)
-                requerente = str(requerente_raw)
+        for campo in ("_users_id_requester", "users_id_requester"):
+            val = chamado.get(campo)
+            if val:
+                try:
+                    uid = int(val)
+                    if uid > 0:
+                        requerente = self.glpi.buscar_nome_usuario(uid)
+                except (ValueError, TypeError):
+                    requerente = str(val)
+                break
 
         return {
             "ID do Chamado": ticket_id,
-            "Título": chamado.get(_FIELD["titulo"], ""),
-            "Status": status_texto,
-            "Tempo para Solução (SLA)": _formatar_datetime(chamado.get(_FIELD["sla"])),
-            "Data de Abertura": _formatar_datetime(chamado.get(_FIELD["data_abertura"])),
+            "Título": chamado.get("name", ""),
+            "Status": STATUS_MAP.get(status_id, f"Status {status_id}"),
+            "Tempo para Solução (SLA)": _formatar_datetime(chamado.get("time_to_resolve")),
+            "Data de Abertura": _formatar_datetime(chamado.get("date_creation")),
             "Requerente": requerente,
         }
 
