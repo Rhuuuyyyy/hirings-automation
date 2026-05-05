@@ -235,57 +235,82 @@ class ClienteGLPI:
     # --- Endpoints de negócio -----------------------------------------------
 
     def buscar_chamados_ativos(self) -> list[dict[str, Any]]:
-        """Busca chamados via GET /Ticket e filtra ativos (status 1-4) em Python.
+        """Busca chamados via GET /Ticket com paginação e filtra ativos (status 1-4).
 
-        Usa o endpoint direto em vez da Search API porque alguns perfis GLPI
-        retornam body vazio na Search API por restrições de permissão ou quirks
-        de versão. O endpoint /Ticket retorna os campos com nomes legíveis
-        (id, name, status, date_creation, time_to_resolve).
+        Usa páginas de 50 itens para evitar crash de memória no servidor PHP.
+        Lê o header Content-Range para saber o total e parar a paginação.
         """
-        url = f"{self.base_url}/Ticket?range=0-9999"
-        logger.info("Consultando: %s", url)
+        PAGE_SIZE = 50
+        todos: list[dict] = []
+        offset = 0
 
-        try:
-            response = self._session.get(url, timeout=HTTP_TIMEOUT)
+        while True:
+            fim = offset + PAGE_SIZE - 1
+            url = f"{self.base_url}/Ticket?range={offset}-{fim}"
+            logger.info("Buscando página: %s", url)
 
-            if response.status_code in (401, 403):
-                self._renovar_sessao()
+            try:
                 response = self._session.get(url, timeout=HTTP_TIMEOUT)
 
-            logger.info(
-                "Resposta: HTTP %s | %d bytes | Content-Type: %s",
-                response.status_code,
-                len(response.content),
-                response.headers.get("Content-Type", "?"),
-            )
+                if response.status_code in (401, 403):
+                    self._renovar_sessao()
+                    response = self._session.get(url, timeout=HTTP_TIMEOUT)
 
-            if not response.ok:
-                logger.error("Erro da API: %s", response.text[:400])
-                response.raise_for_status()
-
-            if not response.text.strip():
-                logger.warning("API retornou body vazio — nenhum chamado visível para este perfil.")
-                return []
-
-            dados = response.json()
-
-            if not isinstance(dados, list):
-                logger.warning(
-                    "Formato inesperado (esperado lista, recebido %s): %.300s",
-                    type(dados).__name__, str(dados),
+                logger.info(
+                    "Página %d: HTTP %s | %d bytes | Content-Range: %s",
+                    offset // PAGE_SIZE,
+                    response.status_code,
+                    len(response.content),
+                    response.headers.get("Content-Range", "—"),
                 )
-                return []
 
-            ativos = [t for t in dados if t.get("status") in STATUSES_ATIVOS]
-            logger.info("Total recebido: %d | Ativos (status 1-4): %d", len(dados), len(ativos))
-            return ativos
+                # 404 significa que não há itens nesse range (além do total)
+                if response.status_code == 404:
+                    break
 
-        except requests.exceptions.RequestException as exc:
-            logger.error("Falha de rede ao buscar chamados: %s", exc)
-            return []
-        except ValueError as exc:
-            logger.error("JSON inválido na resposta: %s | Body: %.300s", exc, response.text)
-            return []
+                if not response.ok:
+                    logger.error("Erro HTTP %s: %.400s", response.status_code, response.text)
+                    break
+
+                if not response.text.strip():
+                    logger.warning("Body vazio na página %d.", offset // PAGE_SIZE)
+                    break
+
+                pagina = response.json()
+
+                if not isinstance(pagina, list):
+                    logger.warning("Formato inesperado: %s | %.300s", type(pagina).__name__, str(pagina))
+                    break
+
+                todos.extend(pagina)
+
+                # Content-Range: "0-49/1234" → total de itens no servidor = 1234
+                total_servidor = None
+                cr = response.headers.get("Content-Range", "")
+                if "/" in cr:
+                    try:
+                        total_servidor = int(cr.split("/")[-1])
+                    except ValueError:
+                        pass
+
+                itens_ate_agora = offset + len(pagina)
+                if total_servidor is not None and itens_ate_agora >= total_servidor:
+                    break
+                if len(pagina) < PAGE_SIZE:
+                    break  # Última página (sem Content-Range ou incompleta)
+
+                offset += PAGE_SIZE
+
+            except requests.exceptions.RequestException as exc:
+                logger.error("Falha de rede (range %d-%d): %s", offset, fim, exc)
+                break
+            except ValueError as exc:
+                logger.error("JSON inválido (range %d-%d): %s | Body: %.200s", offset, fim, exc, response.text)
+                break
+
+        ativos = [t for t in todos if t.get("status") in STATUSES_ATIVOS]
+        logger.info("Total buscado: %d chamado(s) | Ativos (status 1-4): %d", len(todos), len(ativos))
+        return ativos
 
     def buscar_nome_usuario(self, user_id: int) -> str:
         """Retorna nome completo do usuário GLPI, com cache em memória."""
