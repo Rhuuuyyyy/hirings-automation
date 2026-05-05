@@ -107,7 +107,7 @@ COLUNAS_EXCEL = [
     "ID do Chamado",
     "Título",
     "Status",
-    "Tempo para Solução (SLA)",
+    "Tempo para Solução",
     "Data de Abertura",
     "Requerente",
 ]
@@ -118,7 +118,7 @@ COLUNAS_EXCEL = [
 # Configuração
 # ============================================================================
 
-def carregar_configuracoes() -> dict[str, str]:
+def carregar_configuracoes() -> dict[str, Any]:
     """Lê .env, valida obrigatórias e retorna config normalizada."""
     load_dotenv()
 
@@ -139,12 +139,24 @@ def carregar_configuracoes() -> dict[str, str]:
         logger.critical("Variáveis de ambiente obrigatórias ausentes: %s", ", ".join(ausentes))
         sys.exit(1)
 
+    cat_raw = os.getenv("CATEGORIA_CONTRATACAO_IDS") or os.getenv("CATEGORIA_CONTRATACAO_IDS", "")
+    categoria_ids = [c.strip() for c in cat_raw.split(",") if c.strip()]
+    if not categoria_ids:
+        logger.critical(
+            "CATEGORIA_CONTRATACAO_IDS não definida no .env. "
+            "Informe os IDs de categoria separados por vírgula (ex: 152,153)."
+        )
+        sys.exit(1)
+
+    logger.info("Categorias de contratação configuradas: %s", categoria_ids)
+
     return {
         "GLPI_URL": glpi_url.rstrip("/"),
         "GLPI_USER_TOKEN": user_token,
         "GLPI_APP_TOKEN": app_token,
         "POLLING_INTERVAL": os.getenv("POLLING_INTERVAL", "300"),
         "EXCEL_PATH": os.getenv("EXCEL_PATH", "chamados_acompanhamento.xlsx"),
+        "CATEGORIA_IDS": categoria_ids,
     }
 
 
@@ -160,10 +172,13 @@ class ClienteGLPI:
     replicando o padrão de auto-healing do boilerplate legado.
     """
 
-    def __init__(self, base_url: str, app_token: str, user_token: str) -> None:
+    def __init__(
+        self, base_url: str, app_token: str, user_token: str, categoria_ids: list[str]
+    ) -> None:
         self.base_url = base_url
         self.app_token = app_token
         self.user_token = user_token
+        self.categoria_ids = categoria_ids
         self.session_token: str | None = None
         self._session = requests.Session()
         self._cache_usuarios: dict[int, str] = {}
@@ -235,75 +250,89 @@ class ClienteGLPI:
     # --- Endpoints de negócio -----------------------------------------------
 
     def buscar_chamados_ativos(self) -> list[dict[str, Any]]:
-        """Busca chamados ativos via Search API com filtro de status no servidor.
+        """Busca chamados de contratação ativos, filtrando por categoria e status no servidor.
 
-        Usa a Search API (filtra status 1-4 no GLPI) em vez de GET /Ticket
-        (que retorna todos os tickets e filtra no cliente — lento para bases grandes).
-        Paginação de 200 por vez com parada via totalcount da resposta.
-        Colchetes são literais na URL porque PHP não parseia %5B/%5D como arrays.
+        Replica a lógica do código legado: itera sobre cada categoria configurada
+        em CATEGORIA_CONTRATACAO_IDS e faz uma busca por categoria, excluindo os
+        status Solucionado (5) e Fechado (6).
+
+        forcedisplay garante que os campos de ID, título, status, prazo, data e
+        requerente sejam sempre retornados, independente da view padrão do usuário.
         """
         PAGE_SIZE = 200
-        offset = 0
-        todos: list[dict] = []
+        # dict para deduplicar por ID caso um ticket apareça em duas categorias
+        todos: dict[int, dict] = {}
 
-        while True:
-            partes: list[str] = []
-            for i, status in enumerate(sorted(STATUSES_ATIVOS)):
-                if i > 0:
-                    partes.append(f"criteria[{i}][link]=OR")
-                partes.append(f"criteria[{i}][field]=12")
-                partes.append(f"criteria[{i}][searchtype]=equals")
-                partes.append(f"criteria[{i}][value]={status}")
+        for cat_id in self.categoria_ids:
+            offset = 0
+            while True:
+                partes = [
+                    # Filtro de categoria (field 7 = Categoria do chamado)
+                    "criteria[0][field]=7",
+                    "criteria[0][searchtype]=equals",
+                    f"criteria[0][value]={cat_id}",
+                    # AND: excluir status Solucionado (5)
+                    "criteria[1][link]=AND",
+                    "criteria[1][field]=12",
+                    "criteria[1][searchtype]=notequals",
+                    "criteria[1][value]=5",
+                    # AND: excluir status Fechado (6)
+                    "criteria[2][link]=AND",
+                    "criteria[2][field]=12",
+                    "criteria[2][searchtype]=notequals",
+                    "criteria[2][value]=6",
+                    # Campos obrigatórios na resposta
+                    "forcedisplay[0]=2",   # ID do chamado
+                    "forcedisplay[1]=1",   # Título
+                    "forcedisplay[2]=12",  # Status
+                    "forcedisplay[3]=17",  # Tempo para Solução (prazo)
+                    "forcedisplay[4]=15",  # Data de abertura
+                    "forcedisplay[5]=4",   # Requerente (user ID)
+                    f"range={offset}-{offset + PAGE_SIZE - 1}",
+                ]
+                url = f"{self.base_url}/search/Ticket?{'&'.join(partes)}"
+                logger.info("Buscando categoria %s (offset=%d)", cat_id, offset)
 
-            partes.append(f"range={offset}-{offset + PAGE_SIZE - 1}")
-            url = f"{self.base_url}/search/Ticket?{'&'.join(partes)}"
-            logger.info("Search API (offset=%d): %s", offset, url)
-
-            try:
-                response = self._session.get(url, timeout=HTTP_TIMEOUT)
-                if response.status_code in (401, 403):
-                    self._renovar_sessao()
+                try:
                     response = self._session.get(url, timeout=HTTP_TIMEOUT)
+                    if response.status_code in (401, 403):
+                        self._renovar_sessao()
+                        response = self._session.get(url, timeout=HTTP_TIMEOUT)
 
-                logger.info(
-                    "Resposta: HTTP %s | %d bytes",
-                    response.status_code, len(response.content),
-                )
+                    logger.info("HTTP %s | %d bytes", response.status_code, len(response.content))
 
-                if not response.ok:
-                    logger.error("Erro da Search API: %.400s", response.text)
+                    if not response.ok:
+                        logger.error("Erro (cat %s): %.300s", cat_id, response.text)
+                        break
+
+                    if not response.text.strip():
+                        logger.info("Categoria %s: sem chamados ativos.", cat_id)
+                        break
+
+                    dados = response.json()
+                    items: list[dict] = dados.get("data", [])
+                    totalcount: int = dados.get("totalcount", 0)
+
+                    for item in items:
+                        tid = item.get("2") or item.get("id")
+                        if tid is not None:
+                            todos[int(tid)] = item
+
+                    logger.info("Categoria %s: %d/%d chamados.", cat_id, offset + len(items), totalcount)
+
+                    if not items or offset + len(items) >= totalcount:
+                        break
+                    offset += PAGE_SIZE
+
+                except requests.exceptions.RequestException as exc:
+                    logger.error("Falha de rede (cat %s, offset %d): %s", cat_id, offset, exc)
+                    break
+                except ValueError as exc:
+                    logger.error("JSON inválido (cat %s): %s", cat_id, exc)
                     break
 
-                if not response.text.strip():
-                    logger.warning(
-                        "Search API retornou body vazio. "
-                        "Verifique permissões do perfil GLPI ou tente com filtro de categoria."
-                    )
-                    break
-
-                dados = response.json()
-                items: list[dict] = dados.get("data", [])
-                totalcount: int = dados.get("totalcount", 0)
-
-                todos.extend(items)
-                logger.info(
-                    "Recebidos %d/%d chamados ativos.", offset + len(items), totalcount
-                )
-
-                if not items or offset + len(items) >= totalcount:
-                    break
-                offset += PAGE_SIZE
-
-            except requests.exceptions.RequestException as exc:
-                logger.error("Falha de rede (offset=%d): %s", offset, exc)
-                break
-            except ValueError as exc:
-                logger.error(
-                    "JSON inválido (offset=%d): %s | Body: %.200s", offset, exc, response.text
-                )
-                break
-
-        return todos
+        logger.info("Total de chamados ativos de contratação: %d", len(todos))
+        return list(todos.values())
 
     def buscar_nome_usuario(self, user_id: int) -> str:
         """Retorna nome completo do usuário GLPI, com cache em memória."""
@@ -416,7 +445,7 @@ class SincronizadorExcel:
             "ID do Chamado": ticket_id,
             "Título": chamado.get("1") or chamado.get("name") or "",
             "Status": STATUS_MAP.get(status_id, f"Status {status_id}"),
-            "Tempo para Solução (SLA)": _formatar_datetime(
+            "Tempo para Solução": _formatar_datetime(
                 chamado.get("17") or chamado.get("time_to_resolve")
             ),
             "Data de Abertura": _formatar_datetime(
@@ -485,6 +514,7 @@ def main() -> None:
         base_url=config["GLPI_URL"],
         app_token=config["GLPI_APP_TOKEN"],
         user_token=config["GLPI_USER_TOKEN"],
+        categoria_ids=config["CATEGORIA_IDS"],
     )
     sync = SincronizadorExcel(excel_path, glpi)
 
