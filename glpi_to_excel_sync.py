@@ -16,9 +16,54 @@ Variáveis de ambiente (.env):
 Nomes legados aceitos: VERDANADESK_URL, USER_TOKEN, APP_TOKEN.
 """
 
+# ============================================================================
+# Bootstrap — executa ANTES de qualquer import de terceiros.
+# Garante que as dependências estão instaladas no Python que está rodando
+# este script, independente de qual venv ou pip está no PATH do sistema.
+# ============================================================================
+import subprocess
+import sys
+
+def _bootstrap() -> None:
+    _DEPS = {
+        "requests":  "requests>=2.31.0",
+        "pandas":    "pandas>=2.0.0",
+        "openpyxl":  "openpyxl>=3.1.0",
+        "dotenv":    "python-dotenv>=1.0.0",
+    }
+    ausentes = [pkg for mod, pkg in _DEPS.items() if _modulo_ausente(mod)]
+    if not ausentes:
+        return
+
+    print(f"[bootstrap] Instalando dependências ausentes: {', '.join(ausentes)}")
+    try:
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "--quiet"] + ausentes
+        )
+    except subprocess.CalledProcessError:
+        print("[bootstrap] ERRO: falha ao instalar dependências. Verifique sua conexão.")
+        sys.exit(1)
+
+    print("[bootstrap] Instalação concluída. Reiniciando script...\n")
+    resultado = subprocess.run([sys.executable] + sys.argv)
+    sys.exit(resultado.returncode)
+
+
+def _modulo_ausente(nome: str) -> bool:
+    try:
+        __import__(nome)
+        return False
+    except ImportError:
+        return True
+
+
+_bootstrap()
+
+# ============================================================================
+# Imports (seguros após o bootstrap)
+# ============================================================================
 import logging
 import os
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
