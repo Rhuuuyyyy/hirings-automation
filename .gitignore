@@ -5,6 +5,10 @@
 chamados_acompanhamento.xlsx
 *.xlsx
 
+# Cache de estado entre ciclos (pode conter dados de chamados)
+cache_chamados.json
+cache_chamados.json.tmp
+
 # Python
 __pycache__/
 *.py[cod]

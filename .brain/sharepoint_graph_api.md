@@ -1,3 +1,11 @@
+# ~~Integração Microsoft Graph API~~ — CANCELADO
+
+> **Status: Arquivado.** Substituído pela arquitetura de Webhooks (Power Automate).
+> A empresa obteve licença Premium do Power Automate, tornando esta abordagem
+> desnecessária. Mantido apenas como referência histórica.
+
+---
+
 # Integração Microsoft Graph API — SharePoint / OneDrive
 
 ## Visão Geral
