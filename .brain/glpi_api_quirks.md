@@ -96,6 +96,35 @@ Nome exibível = `f"{firstname} {realname}".strip()`
 
 ---
 
+## Field 17 (Tempo para Solução) Frequentemente Vazio
+
+A Search API nem sempre retorna o field `17` (`time_to_resolve`) mesmo com `forcedisplay[3]=17`.
+Isso ocorre quando o ticket não tem SLA definido ou quando o GLPI não calcula o prazo automaticamente.
+
+**Fallback implementado:** quando o field 17 está vazio, o script faz um `GET /Ticket/{id}` e
+aplica regex no campo `content` (HTML bruto do formulário) para extrair o padrão visual que o
+solicitante preenche:
+
+```
+Data de início: DD-MM-YYYY
+```
+
+**Regex usada:**
+```python
+r"Data de in[íi]cio:\s*(?:<[^>]+>|&nbsp;|\s)*(\d{2}[-/]\d{2}[-/]\d{4})"
+```
+
+- `in[íi]cio` → tolera com ou sem acento
+- `(?:<[^>]+>|&nbsp;|\s)*` → ignora tags HTML e espaços entre o rótulo e a data
+- `(\d{2}[-/]\d{2}[-/]\d{4})` → captura DD-MM-YYYY ou DD/MM/YYYY
+
+A data capturada é normalizada para `DD/MM/YYYY` (troca `-` por `/`).
+
+**Custo extra:** 1 chamada GET por ticket com SLA vazio. Mitigado pelo cache de usuários já existente
+(o endpoint de usuário é separado). Tickets com SLA preenchido não fazem essa chamada extra.
+
+---
+
 ## Paginação da Search API
 
 O parâmetro `range` controla a paginação:
