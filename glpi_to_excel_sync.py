@@ -1,19 +1,18 @@
 """
-glpi_to_excel_sync.py — Worker de sincronização GLPI → Excel.
+glpi_to_excel_sync.py — Worker de sincronização GLPI → Power Automate (Webhook).
 
-Polling contínuo da fila de chamados do GLPI. Mantém o arquivo
-chamados_acompanhamento.xlsx com o backlog ativo (Novo, Em Atendimento, Pendente).
-Chamados Solucionados ou Fechados são removidos da planilha automaticamente.
+Polling contínuo da fila de chamados do GLPI. Detecta alterações comparando com
+o estado do ciclo anterior (cache_chamados.json) e dispara POSTs para um webhook
+do Power Automate apenas quando há novidade: novo chamado, atualização ou resolução.
 
 Variáveis de ambiente (.env):
-    GLPI_URL          — URL base da API REST, incluindo /apirest.php
-                        Ex: http://glpi.empresa.com/apirest.php
-    GLPI_USER_TOKEN   — User-Token do usuário de integração
-    GLPI_APP_TOKEN    — App-Token da aplicação cadastrada no GLPI
-    POLLING_INTERVAL  — Segundos entre varreduras (padrão: 300 = 5 min)
-    EXCEL_PATH        — Caminho do arquivo de saída (padrão: chamados_acompanhamento.xlsx)
-
-Nomes legados aceitos: VERDANADESK_URL, USER_TOKEN, APP_TOKEN.
+    GLPI_URL                             — URL base da API REST, incluindo /apirest.php
+    GLPI_USER_TOKEN                      — User-Token do usuário de integração
+    GLPI_APP_TOKEN                       — App-Token da aplicação no GLPI
+    CATEGORIA_CONTRATACAO_IDS            — IDs de categoria (vírgula) a monitorar
+    CATEGORIA_CONTRATACAO_ID_WITH_ASSETS — ID da categoria com envio de equipamento
+    POWER_AUTOMATE_WEBHOOK_URL           — URL do webhook do Power Automate
+    POLLING_INTERVAL                     — Segundos entre varreduras (padrão: 300)
 """
 
 # ============================================================================
@@ -24,12 +23,19 @@ Nomes legados aceitos: VERDANADESK_URL, USER_TOKEN, APP_TOKEN.
 import subprocess
 import sys
 
+
+def _modulo_ausente(nome: str) -> bool:
+    try:
+        __import__(nome)
+        return False
+    except ImportError:
+        return True
+
+
 def _bootstrap() -> None:
     _DEPS = {
-        "requests":  "requests>=2.31.0",
-        "pandas":    "pandas>=2.0.0",
-        "openpyxl":  "openpyxl>=3.1.0",
-        "dotenv":    "python-dotenv>=1.0.0",
+        "requests": "requests>=2.31.0",
+        "dotenv":   "python-dotenv>=1.0.0",
     }
     ausentes = [pkg for mod, pkg in _DEPS.items() if _modulo_ausente(mod)]
     if not ausentes:
@@ -49,32 +55,22 @@ def _bootstrap() -> None:
     sys.exit(resultado.returncode)
 
 
-def _modulo_ausente(nome: str) -> bool:
-    try:
-        __import__(nome)
-        return False
-    except ImportError:
-        return True
-
-
 _bootstrap()
 
 # ============================================================================
 # Imports (seguros após o bootstrap)
 # ============================================================================
+import json
 import logging
 import os
+import re
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-import re
 
-import pandas as pd
 import requests
 from dotenv import load_dotenv
-from openpyxl import load_workbook
-from openpyxl.styles import Alignment, Font, PatternFill
 
 # ============================================================================
 # Logging
@@ -87,7 +83,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("glpi_sync")
 
-HTTP_TIMEOUT = 30  # segundos
+HTTP_TIMEOUT = 30      # segundos — chamadas GLPI
+WEBHOOK_TIMEOUT = 30   # segundos — Power Automate pode ser lento na primeira invocação
 
 # ============================================================================
 # Constantes de domínio
@@ -103,38 +100,28 @@ STATUS_MAP: dict[int, str] = {
     6: "Fechado",
 }
 
-# Apenas estes status ficam na planilha; ausência = ticket foi resolvido/fechado
+# Apenas estes status ficam no cache ativo; ausência = ticket foi resolvido/fechado
 STATUSES_ATIVOS = frozenset({1, 2, 3, 4})
 
-COLUNAS_EXCEL = [
-    "ID do Chamado",
-    "Título",
-    "Status",
-    "Tempo para Solução",
-    "Data de Abertura",
-    "Requerente",
-    "Termo Status",
-]
-
-# Texto canônico da tarefa de controle de ativo; a busca é case-insensitive.
+# Texto canônico da tarefa de controle de ativo; busca é case-insensitive
 _TEXTO_TAREFA_TERMO = "Envio do termo de responsabilidade"
 
-# Estado GLPI de TicketTask: 1 = To do, 2 = Done  (Planning::TODO / Planning::DONE)
-# Se sua instância usar valores diferentes, ajuste apenas esta constante.
+# Estado GLPI de TicketTask: 1 = To do, 2 = Done (Planning::TODO / Planning::DONE)
 _GLPI_TASK_STATE_DONE = 2
-
 
 # ============================================================================
 # Configuração
 # ============================================================================
 
+
 def carregar_configuracoes() -> dict[str, Any]:
     """Lê .env, valida obrigatórias e retorna config normalizada."""
     load_dotenv()
 
-    glpi_url = os.getenv("GLPI_URL") or os.getenv("VERDANADESK_URL")
-    user_token = os.getenv("GLPI_USER_TOKEN") or os.getenv("USER_TOKEN")
-    app_token = os.getenv("GLPI_APP_TOKEN") or os.getenv("APP_TOKEN")
+    glpi_url    = os.getenv("GLPI_URL") or os.getenv("VERDANADESK_URL")
+    user_token  = os.getenv("GLPI_USER_TOKEN") or os.getenv("USER_TOKEN")
+    app_token   = os.getenv("GLPI_APP_TOKEN") or os.getenv("APP_TOKEN")
+    webhook_url = os.getenv("POWER_AUTOMATE_WEBHOOK_URL")
 
     ausentes = [
         nome
@@ -142,6 +129,7 @@ def carregar_configuracoes() -> dict[str, Any]:
             ("GLPI_URL", glpi_url),
             ("GLPI_USER_TOKEN", user_token),
             ("GLPI_APP_TOKEN", app_token),
+            ("POWER_AUTOMATE_WEBHOOK_URL", webhook_url),
         ]
         if not val
     ]
@@ -149,7 +137,7 @@ def carregar_configuracoes() -> dict[str, Any]:
         logger.critical("Variáveis de ambiente obrigatórias ausentes: %s", ", ".join(ausentes))
         sys.exit(1)
 
-    cat_raw = os.getenv("CATEGORIA_CONTRATACAO_IDS") or os.getenv("CATEGORIA_CONTRATACAO_IDS", "")
+    cat_raw = os.getenv("CATEGORIA_CONTRATACAO_IDS", "")
     categoria_ids = [c.strip() for c in cat_raw.split(",") if c.strip()]
     if not categoria_ids:
         logger.critical(
@@ -174,12 +162,12 @@ def carregar_configuracoes() -> dict[str, Any]:
             )
 
     return {
-        "GLPI_URL": glpi_url.rstrip("/"),
-        "GLPI_USER_TOKEN": user_token,
-        "GLPI_APP_TOKEN": app_token,
+        "GLPI_URL":         glpi_url.rstrip("/"),
+        "GLPI_USER_TOKEN":  user_token,
+        "GLPI_APP_TOKEN":   app_token,
+        "WEBHOOK_URL":      webhook_url,
         "POLLING_INTERVAL": os.getenv("POLLING_INTERVAL", "300"),
-        "EXCEL_PATH": os.getenv("EXCEL_PATH", "chamados_acompanhamento.xlsx"),
-        "CATEGORIA_IDS": categoria_ids,
+        "CATEGORIA_IDS":    categoria_ids,
         "CAT_ID_COM_ATIVO": cat_id_com_ativo,
     }
 
@@ -221,7 +209,7 @@ class ClienteGLPI:
     def _atualizar_headers(self) -> None:
         self._session.headers.clear()
         self._session.headers.update({
-            "App-Token": self.app_token,
+            "App-Token":    self.app_token,
             "Content-Type": "application/json",
         })
         if self.session_token:
@@ -303,14 +291,11 @@ class ClienteGLPI:
     # --- Endpoints de negócio -----------------------------------------------
 
     def buscar_chamados_ativos(self) -> list[dict[str, Any]]:
-        """Busca chamados de contratação ativos, filtrando por categoria e status no servidor.
+        """Busca chamados de contratação ativos, filtrando por categoria no servidor.
 
-        Replica a lógica do código legado: itera sobre cada categoria configurada
-        em CATEGORIA_CONTRATACAO_IDS e faz uma busca por categoria, excluindo os
-        status Solucionado (5) e Fechado (6).
-
-        forcedisplay garante que os campos de ID, título, status, prazo, data e
-        requerente sejam sempre retornados, independente da view padrão do usuário.
+        Itera sobre cada categoria em CATEGORIA_CONTRATACAO_IDS, pagina a 200/página
+        e filtra status ativos em Python (notequals causa body vazio nesta versão do GLPI).
+        forcedisplay garante que os 6 campos sempre aparecem na resposta.
         """
         PAGE_SIZE = 200
         # dict para deduplicar por ID caso um ticket apareça em duas categorias
@@ -321,8 +306,6 @@ class ClienteGLPI:
             while True:
                 partes = [
                     # Filtro de categoria no servidor (field 7 = Categoria do chamado)
-                    # Filtro de status é feito em Python após receber os dados,
-                    # pois o searchtype=notequals causa body vazio nesta versão do GLPI.
                     "criteria[0][field]=7",
                     "criteria[0][searchtype]=equals",
                     f"criteria[0][value]={cat_id}",
@@ -351,7 +334,7 @@ class ClienteGLPI:
                         break
 
                     if not response.text.strip():
-                        logger.info("Categoria %s: sem chamados ativos.", cat_id)
+                        logger.info("Categoria %s: sem chamados.", cat_id)
                         break
 
                     dados = response.json()
@@ -366,7 +349,7 @@ class ClienteGLPI:
                         except (ValueError, TypeError):
                             status_id = 0
                         if tid is not None and status_id in STATUSES_ATIVOS:
-                            # Injeta o ID de categoria para uso posterior em _chamado_para_linha
+                            # Injeta o ID de categoria para uso em _chamado_para_payload
                             item["_cat_id"] = int(cat_id)
                             todos[int(tid)] = item
                             ativos_pagina += 1
@@ -393,10 +376,8 @@ class ClienteGLPI:
     def buscar_data_inicio_do_conteudo(self, ticket_id: int) -> str:
         """Extrai 'Data de início' do HTML do corpo do chamado quando o campo SLA vem vazio.
 
-        A Search API às vezes não retorna o field 17 (time_to_resolve). Nesse caso,
-        buscamos o conteúdo bruto do ticket via GET /Ticket/{id} e aplicamos regex
-        para encontrar o padrão visual 'Data de inicio: DD-MM-YYYY' que o solicitante
-        preenche no formulário do chamado.
+        Fallback: quando field 17 está vazio na Search API, faz GET /Ticket/{id} e aplica
+        regex no campo content (HTML bruto) para extrair o padrão 'Data de inicio: DD-MM-YYYY'.
         """
         _PADRAO_DATA_INICIO = re.compile(
             r"Data de in[íi]cio:\s*(?:<[^>]+>|&nbsp;|\s)*(\d{2}[-/]\d{2}[-/]\d{4})",
@@ -447,7 +428,10 @@ class ClienteGLPI:
                     return "Pendente de envio"
 
             # Tarefa não existe — criar
-            logger.info("Ticket #%d: tarefa '%s' não encontrada. Criando.", ticket_id, _TEXTO_TAREFA_TERMO)
+            logger.info(
+                "Ticket #%d: tarefa '%s' não encontrada. Criando.",
+                ticket_id, _TEXTO_TAREFA_TERMO,
+            )
             self._post(
                 f"{self.base_url}/Ticket/{ticket_id}/TicketTask",
                 {"tickets_id": ticket_id, "content": _TEXTO_TAREFA_TERMO, "state": 1},
@@ -469,7 +453,7 @@ class ClienteGLPI:
         try:
             dados = self._get(f"{self.base_url}/User/{user_id}")
             firstname = dados.get("firstname", "")
-            realname = dados.get("realname", "")
+            realname  = dados.get("realname", "")
             nome = f"{firstname} {realname}".strip() or dados.get("name", str(user_id))
         except requests.exceptions.RequestException:
             nome = str(user_id)
@@ -493,144 +477,83 @@ def _formatar_datetime(valor: Any) -> str:
 
 
 # ============================================================================
-# Formatação Excel (openpyxl pós-salvamento)
+# Cache de estado entre ciclos
 # ============================================================================
 
-# Colunas com conteúdo curto/fixo ficam centralizadas; as demais alinham à esquerda.
-_COLUNAS_CENTRADAS = frozenset({
-    "ID do Chamado", "Status", "Tempo para Solução", "Data de Abertura", "Termo Status"
-})
-
-# Cabeçalho: azul escuro corporativo (compatível com paleta padrão do Office).
-_COR_CABECALHO = "1F4E79"
-_LARGURA_MAXIMA_COLUNA = 65
+CACHE_PATH = Path("cache_chamados.json")
 
 
-def _aplicar_formatacao_excel(caminho: Path) -> None:
-    """Abre o xlsx recém-gerado pelo pandas e aplica estilização via openpyxl.
+def _carregar_cache(caminho: Path) -> dict[str, dict]:
+    """Lê o cache do disco. Retorna dict vazio se o arquivo não existir ou estiver corrompido."""
+    if not caminho.exists():
+        return {}
+    try:
+        return json.loads(caminho.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("Cache corrompido ou ilegível (%s). Iniciando do zero.", exc)
+        return {}
 
-    Operações (em ordem):
-      1. Estilo do cabeçalho — negrito, fundo azul escuro, fonte branca, centralizado.
-      2. Freeze panes em A2 — cabeçalho fixo ao rolar.
-      3. AutoFilter na faixa completa de dados.
-      4. Largura automática de colunas baseada no maior conteúdo.
-      5. Alinhamento de células de dados: centro ou esquerda por coluna.
+
+def _salvar_cache_atomico(caminho: Path, cache: dict[str, dict]) -> None:
+    """Grava o cache em arquivo temporário e então faz rename atômico.
+
+    os.replace() é atômico em POSIX e Windows (mesmo filesystem): garante que
+    uma reinicialização no meio da escrita nunca deixa um JSON truncado no disco.
     """
-    wb = load_workbook(caminho)
-    ws = wb.active
-
-    fill_cabecalho = PatternFill("solid", fgColor=_COR_CABECALHO)
-    fonte_cabecalho = Font(bold=True, color="FFFFFF", size=11)
-    alinhar_centro = Alignment(horizontal="center", vertical="center")
-    alinhar_esquerda = Alignment(horizontal="left", vertical="center")
-
-    # 1. Estilo do cabeçalho (linha 1)
-    for cell in ws[1]:
-        cell.fill = fill_cabecalho
-        cell.font = fonte_cabecalho
-        cell.alignment = alinhar_centro
-    ws.row_dimensions[1].height = 22
-
-    # 2. Freeze panes — mantém cabeçalho visível ao rolar para baixo
-    ws.freeze_panes = "A2"
-
-    # 3. AutoFilter cobrindo toda a faixa de dados
-    ws.auto_filter.ref = ws.dimensions
-
-    # 4 + 5. Largura de colunas e alinhamento de dados
-    for col_cells in ws.columns:
-        header_cell = col_cells[0]
-        col_name = header_cell.value or ""
-        is_centered = col_name in _COLUNAS_CENTRADAS
-
-        # Largura: máximo entre o cabeçalho e qualquer célula de dado
-        max_len = len(str(col_name))
-        for cell in col_cells[1:]:
-            if cell.value is not None:
-                max_len = max(max_len, len(str(cell.value)))
-            cell.alignment = alinhar_centro if is_centered else alinhar_esquerda
-
-        ws.column_dimensions[header_cell.column_letter].width = min(max_len + 4, _LARGURA_MAXIMA_COLUNA)
-
-    wb.save(caminho)
+    tmp = caminho.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, caminho)
 
 
 # ============================================================================
-# Sincronizador Excel
+# Sincronizador via Webhook
 # ============================================================================
 
-class SincronizadorExcel:
+class SincronizadorWebhook:
     """
-    Mantém chamados_acompanhamento.xlsx como fotografia do backlog ativo.
+    Compara o estado atual do GLPI com o cache local e dispara o webhook apenas para diferenças.
 
-    Estratégia de sincronização:
-    - Upsert: substitui linhas existentes, insere linhas novas.
-    - Delete: remove IDs que não estão mais na resposta da API
-      (foram resolvidos, fechados ou excluídos no GLPI).
+    Regras:
+    - UPSERT: chamado novo (não está no cache) ou com qualquer campo alterado.
+    - DELETE: chamado presente no cache mas ausente da busca atual (foi resolvido/fechado).
+
+    Cada POST ao webhook é isolado em try/except próprio: uma falha de rede ou timeout
+    no Power Automate não interrompe o processamento dos demais chamados.
+    O cache é gravado atomicamente ao final de cada ciclo completo.
     """
 
-    def __init__(self, caminho: Path, glpi: ClienteGLPI) -> None:
-        self.caminho = caminho
+    def __init__(
+        self, webhook_url: str, glpi: ClienteGLPI, cache_path: Path
+    ) -> None:
+        self.webhook_url = webhook_url
         self.glpi = glpi
+        self.cache_path = cache_path
+        self._cache: dict[str, dict] = _carregar_cache(cache_path)
+        logger.info("Cache carregado: %d chamado(s) do ciclo anterior.", len(self._cache))
 
-    def _carregar_df(self) -> pd.DataFrame:
-        if self.caminho.exists():
-            try:
-                return pd.read_excel(self.caminho, dtype={"ID do Chamado": int})
-            except Exception as exc:
-                logger.warning(
-                    "Não foi possível ler a planilha existente (%s). Iniciando do zero.", exc
-                )
-        return pd.DataFrame(columns=COLUNAS_EXCEL)
-
-    def _salvar_df(self, df: pd.DataFrame) -> bool:
-        try:
-            df.to_excel(self.caminho, index=False)
-        except PermissionError:
-            logger.warning(
-                "Arquivo '%s' está aberto por outro processo. "
-                "Atualização será refeita na próxima varredura.",
-                self.caminho,
-            )
-            return False
-        except Exception as exc:
-            logger.error("Erro inesperado ao salvar planilha: %s", exc)
-            return False
-
-        # Dados persistidos — aplicar formatação estética separadamente.
-        # Falha aqui não impede o ciclo de polling de continuar.
-        try:
-            _aplicar_formatacao_excel(self.caminho)
-        except Exception as exc:
-            logger.warning("Formatação do Excel falhou (dados salvos normalmente): %s", exc)
-
-        return True
-
-    def _chamado_para_linha(self, chamado: dict) -> dict | None:
-        """Converte um ticket da API em linha do DataFrame.
-
-        Aceita tanto o formato da Search API (chaves numéricas: "2", "1", "12"…)
-        quanto o da API direta (chaves nomeadas: "id", "name", "status"…).
-        """
-        # ID: chave "2" na Search API, "id" na API direta
+    def _chamado_para_payload(self, chamado: dict) -> dict | None:
+        """Extrai e normaliza um chamado da API para o schema do webhook (sem 'Acao')."""
         id_raw = chamado.get("2") or chamado.get("id")
         if id_raw is None:
             return None
         try:
             ticket_id = int(id_raw)
         except (ValueError, TypeError):
-            logger.debug("ID inválido: %s", id_raw)
+            logger.debug("ID inválido descartado: %s", id_raw)
             return None
 
-        # Status
         try:
             status_id = int(chamado.get("12") or chamado.get("status") or 0)
         except (ValueError, TypeError):
             status_id = 0
 
-        # Requerente: "4" na Search API, "_users_id_requester"/"users_id_requester" na direta
+        # Requerente: "4" na Search API, nomes alternativos na API direta
         requerente = ""
-        req_raw = chamado.get("4") or chamado.get("_users_id_requester") or chamado.get("users_id_requester")
+        req_raw = (
+            chamado.get("4")
+            or chamado.get("_users_id_requester")
+            or chamado.get("users_id_requester")
+        )
         if req_raw:
             try:
                 uid = int(req_raw)
@@ -639,76 +562,93 @@ class SincronizadorExcel:
             except (ValueError, TypeError):
                 requerente = str(req_raw)
 
-        # Tempo para Solução: tenta o field 17 da Search API primeiro.
-        # Se vier vazio, faz GET /Ticket/{id} e extrai "Data de início" do HTML do corpo.
+        # Tempo para Solução: tenta field 17 da Search API; se vazio, extrai do HTML do corpo
         tempo_solucao = _formatar_datetime(chamado.get("17") or chamado.get("time_to_resolve"))
         if not tempo_solucao:
             tempo_solucao = self.glpi.buscar_data_inicio_do_conteudo(ticket_id)
             if tempo_solucao:
-                logger.debug("Ticket #%d: 'Tempo para Solução' extraído do corpo.", ticket_id)
+                logger.debug("Ticket #%d: 'Tempo_Solucao' extraído do corpo.", ticket_id)
 
-        # Termo Status: depende da categoria do chamado.
-        # _cat_id é injetado por buscar_chamados_ativos(); itilcategories_id cobre API direta.
+        # Termo Status: depende da categoria do chamado
         cat_id = chamado.get("_cat_id") or chamado.get("itilcategories_id")
-        cat_com_ativo = self.glpi.cat_id_com_ativo
-
-        if cat_com_ativo is not None and cat_id == cat_com_ativo:
+        if self.glpi.cat_id_com_ativo is not None and cat_id == self.glpi.cat_id_com_ativo:
             termo_status = self.glpi.verificar_ou_criar_tarefa_termo(ticket_id)
         else:
             termo_status = "Sem equipamento"
 
         return {
-            "ID do Chamado": ticket_id,
-            "Título": chamado.get("1") or chamado.get("name") or "",
-            "Status": STATUS_MAP.get(status_id, f"Status {status_id}"),
-            "Tempo para Solução": tempo_solucao,
-            "Data de Abertura": _formatar_datetime(
+            "ID_do_Chamado": ticket_id,
+            "Titulo":        chamado.get("1") or chamado.get("name") or "",
+            "Status":        STATUS_MAP.get(status_id, f"Status {status_id}"),
+            "Tempo_Solucao": tempo_solucao,
+            "Data_Abertura": _formatar_datetime(
                 chamado.get("15") or chamado.get("date_creation")
             ),
-            "Requerente": requerente,
-            "Termo Status": termo_status,
+            "Requerente":    requerente,
+            "Termo_Status":  termo_status,
         }
 
+    def _post_webhook(self, payload: dict) -> None:
+        """Dispara um único POST ao webhook de forma isolada.
+
+        Nunca propaga exceções: erros são logados e o ciclo continua.
+        """
+        acao = payload.get("Acao", "?")
+        tid  = payload.get("ID_do_Chamado", "?")
+        try:
+            resp = requests.post(self.webhook_url, json=payload, timeout=WEBHOOK_TIMEOUT)
+            resp.raise_for_status()
+            logger.debug("Webhook OK [%s #%s] → HTTP %s", acao, tid, resp.status_code)
+        except requests.exceptions.Timeout:
+            logger.error(
+                "Webhook timeout [%s #%s]: Power Automate não respondeu em %ds.",
+                acao, tid, WEBHOOK_TIMEOUT,
+            )
+        except requests.exceptions.RequestException as exc:
+            logger.error("Webhook falhou [%s #%s]: %s", acao, tid, exc)
+        except Exception as exc:
+            logger.error("Erro inesperado no webhook [%s #%s]: %s", acao, tid, exc)
+
     def sincronizar(self, chamados_api: list[dict]) -> None:
-        """Aplica upsert + remoção para manter a planilha fiel ao backlog ativo."""
-        df_atual = self._carregar_df()
+        """Compara com o cache, dispara webhooks para diferenças e persiste o novo estado."""
+        novo_cache: dict[str, dict] = {}
+        inseridos = atualizados = erros = 0
 
-        linhas = [self._chamado_para_linha(c) for c in chamados_api]
-        linhas = [l for l in linhas if l is not None]
-        ids_ativos_api = {l["ID do Chamado"] for l in linhas}
+        for chamado in chamados_api:
+            payload = self._chamado_para_payload(chamado)
+            if payload is None:
+                erros += 1
+                continue
 
-        ids_anteriores: set[int] = (
-            set(df_atual["ID do Chamado"].tolist()) if not df_atual.empty else set()
+            tid = str(payload["ID_do_Chamado"])
+            # entrada_cache: payload sem "Acao" — exatamente o que comparamos e persistimos
+            entrada_cache = dict(payload)
+
+            if tid not in self._cache:
+                self._post_webhook({"Acao": "UPSERT", **entrada_cache})
+                inseridos += 1
+            elif self._cache[tid] != entrada_cache:
+                self._post_webhook({"Acao": "UPSERT", **entrada_cache})
+                atualizados += 1
+            # sem mudança → nenhum POST disparado
+
+            novo_cache[tid] = entrada_cache
+
+        # DELETE: IDs que existiam no cache mas não vieram na busca atual
+        deletados = 0
+        for tid, dados in self._cache.items():
+            if tid not in novo_cache:
+                self._post_webhook({"Acao": "DELETE", "ID_do_Chamado": dados["ID_do_Chamado"]})
+                deletados += 1
+
+        # Atualiza estado em memória e persiste atomicamente
+        self._cache = novo_cache
+        _salvar_cache_atomico(self.cache_path, self._cache)
+
+        logger.info(
+            "Ciclo concluído: +%d novo(s) | ~%d atualizado(s) | -%d removido(s) | %d erro(s) de mapeamento.",
+            inseridos, atualizados, deletados, erros,
         )
-        ids_para_remover = ids_anteriores - ids_ativos_api
-        if ids_para_remover:
-            logger.info(
-                "Removendo %d chamado(s) resolvido(s)/fechado(s): %s",
-                len(ids_para_remover), sorted(ids_para_remover),
-            )
-
-        # Remove linhas que serão re-inseridas (upsert) ou deletadas
-        df_base = (
-            df_atual[~df_atual["ID do Chamado"].isin(ids_ativos_api | ids_para_remover)]
-            if not df_atual.empty
-            else df_atual
-        )
-
-        df_novos = pd.DataFrame(linhas, columns=COLUNAS_EXCEL)
-        df_final = (
-            pd.concat([df_base, df_novos], ignore_index=True)
-            .sort_values("ID do Chamado")
-            .reset_index(drop=True)
-        )
-
-        inseridos = len(ids_ativos_api - ids_anteriores)
-        atualizados = len(ids_ativos_api & ids_anteriores)
-
-        if self._salvar_df(df_final):
-            logger.info(
-                "Planilha sincronizada: %d ativo(s) | +%d inserido(s) | ~%d atualizado(s) | -%d removido(s)",
-                len(df_final), inseridos, atualizados, len(ids_para_remover),
-            )
 
 
 # ============================================================================
@@ -718,11 +658,10 @@ class SincronizadorExcel:
 def main() -> None:
     config = carregar_configuracoes()
     polling_interval = int(config["POLLING_INTERVAL"])
-    excel_path = Path(config["EXCEL_PATH"])
 
     logger.info(
-        "GLPI→Excel Sync iniciado. Saída: '%s' | Ciclo: %ds (%d min).",
-        excel_path, polling_interval, polling_interval // 60,
+        "GLPI→Webhook Sync iniciado. Cache: '%s' | Ciclo: %ds (%d min).",
+        CACHE_PATH, polling_interval, polling_interval // 60,
     )
 
     glpi = ClienteGLPI(
@@ -732,7 +671,11 @@ def main() -> None:
         categoria_ids=config["CATEGORIA_IDS"],
         cat_id_com_ativo=config["CAT_ID_COM_ATIVO"],
     )
-    sync = SincronizadorExcel(excel_path, glpi)
+    sync = SincronizadorWebhook(
+        webhook_url=config["WEBHOOK_URL"],
+        glpi=glpi,
+        cache_path=CACHE_PATH,
+    )
 
     while True:
         try:
