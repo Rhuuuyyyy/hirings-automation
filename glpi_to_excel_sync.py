@@ -68,6 +68,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+import re
 
 import pandas as pd
 import requests
@@ -335,6 +336,28 @@ class ClienteGLPI:
         logger.info("Total de chamados ativos de contratação: %d", len(todos))
         return list(todos.values())
 
+    def buscar_data_inicio_do_conteudo(self, ticket_id: int) -> str:
+        """Extrai 'Data de início' do HTML do corpo do chamado quando o campo SLA vem vazio.
+
+        A Search API às vezes não retorna o field 17 (time_to_resolve). Nesse caso,
+        buscamos o conteúdo bruto do ticket via GET /Ticket/{id} e aplicamos regex
+        para encontrar o padrão visual 'Data de inicio: DD-MM-YYYY' que o solicitante
+        preenche no formulário do chamado.
+        """
+        _PADRAO_DATA_INICIO = re.compile(
+            r"Data de in[íi]cio:\s*(?:<[^>]+>|&nbsp;|\s)*(\d{2}[-/]\d{2}[-/]\d{4})",
+            re.IGNORECASE,
+        )
+        try:
+            dados = self._get(f"{self.base_url}/Ticket/{ticket_id}")
+            content = dados.get("content", "") or ""
+            match = _PADRAO_DATA_INICIO.search(content)
+            if match:
+                return match.group(1).replace("-", "/")
+        except Exception:
+            pass
+        return ""
+
     def buscar_nome_usuario(self, user_id: int) -> str:
         """Retorna nome completo do usuário GLPI, com cache em memória."""
         if user_id in self._cache_usuarios:
@@ -442,13 +465,19 @@ class SincronizadorExcel:
             except (ValueError, TypeError):
                 requerente = str(req_raw)
 
+        # Tempo para Solução: tenta o field 17 da Search API primeiro.
+        # Se vier vazio, faz GET /Ticket/{id} e extrai "Data de início" do HTML do corpo.
+        tempo_solucao = _formatar_datetime(chamado.get("17") or chamado.get("time_to_resolve"))
+        if not tempo_solucao:
+            tempo_solucao = self.glpi.buscar_data_inicio_do_conteudo(ticket_id)
+            if tempo_solucao:
+                logger.debug("Ticket #%d: 'Tempo para Solução' extraído do corpo.", ticket_id)
+
         return {
             "ID do Chamado": ticket_id,
             "Título": chamado.get("1") or chamado.get("name") or "",
             "Status": STATUS_MAP.get(status_id, f"Status {status_id}"),
-            "Tempo para Solução": _formatar_datetime(
-                chamado.get("17") or chamado.get("time_to_resolve")
-            ),
+            "Tempo para Solução": tempo_solucao,
             "Data de Abertura": _formatar_datetime(
                 chamado.get("15") or chamado.get("date_creation")
             ),
