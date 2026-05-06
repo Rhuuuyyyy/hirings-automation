@@ -21,14 +21,17 @@ glpi_to_excel_sync.py
 │   └── Lê .env, valida vars obrigatórias, suporta nomes legados
 │
 ├── ClienteGLPI
-│   ├── __init__(base_url, app_token, user_token)
+│   ├── __init__(base_url, app_token, user_token, categoria_ids, cat_id_com_ativo)
 │   │   └── _iniciar_sessao() — autentica e armazena session_token
-│   ├── _atualizar_headers()     — reconstrói headers da session
-│   ├── _renovar_sessao()        — auto-healing em 401/403
-│   ├── _get(endpoint, params)   — GET resiliente com retry de sessão
+│   ├── _atualizar_headers()              — reconstrói headers da session
+│   ├── _renovar_sessao()                 — auto-healing em 401/403
+│   ├── _get(url)                         — GET resiliente com retry de sessão
+│   ├── _post(url, payload)               — POST resiliente com retry de sessão
 │   ├── buscar_chamados_ativos() → list[dict]
-│   │   └── Search API com OR de status 1,2,3,4 + forcedisplay dos 6 campos
-│   └── buscar_nome_usuario(id)  → str  (com cache em memória)
+│   │   └── Search API por categoria + forcedisplay dos 6 campos; injeta _cat_id
+│   ├── buscar_data_inicio_do_conteudo(id) → str  — fallback regex no HTML do ticket
+│   ├── verificar_ou_criar_tarefa_termo(id) → str — controle de ativo com cache
+│   └── buscar_nome_usuario(id)           → str   (com cache em memória)
 │
 ├── SincronizadorExcel
 │   ├── __init__(caminho, glpi)
@@ -55,12 +58,18 @@ startup
 
 loop (a cada POLLING_INTERVAL segundos)
   └─ buscar_chamados_ativos()
-       └─ GET /search/Ticket?criteria[status IN 1,2,3,4]&forcedisplay[6 campos]
+       └─ por categoria: GET /search/Ticket?criteria[cat=X]&forcedisplay[6 campos]
+            └─ injeta _cat_id em cada item retornado
   └─ sincronizar(chamados)
        ├─ _carregar_df()  — lê estado atual do xlsx
        ├─ para cada chamado:
        │    └─ _chamado_para_linha()
-       │         └─ buscar_nome_usuario() se requerente_id é número
+       │         ├─ buscar_nome_usuario() se requerente_id é número
+       │         ├─ buscar_data_inicio_do_conteudo() se field 17 vazio
+       │         └─ verificar_ou_criar_tarefa_termo() se cat == CAT_ID_COM_ATIVO
+       │              ├─ GET /Ticket/{id}/TicketTask
+       │              ├─ POST /Ticket/{id}/TicketTask  (se tarefa não existe)
+       │              └─ retorna "Termo enviado" | "Pendente de envio" | "Erro ao criar tarefa"
        ├─ calcula: ids_para_remover = ids_na_planilha - ids_ativos_api
        ├─ monta novo DataFrame (base sem removidos/atualizados + novos)
        └─ _salvar_df()
@@ -84,13 +93,15 @@ loop (a cada POLLING_INTERVAL segundos)
 
 ## Variáveis de Ambiente
 
-| Variável           | Obrigatória | Padrão                          | Legado aceito      |
-|--------------------|-------------|----------------------------------|--------------------|
-| `GLPI_URL`         | ✅          | —                                | `VERDANADESK_URL`  |
-| `GLPI_USER_TOKEN`  | ✅          | —                                | `USER_TOKEN`       |
-| `GLPI_APP_TOKEN`   | ✅          | —                                | `APP_TOKEN`        |
-| `POLLING_INTERVAL` | ❌          | `300` (5 min)                    | —                  |
-| `EXCEL_PATH`       | ❌          | `chamados_acompanhamento.xlsx`   | —                  |
+| Variável                               | Obrigatória | Padrão                          | Legado aceito      |
+|----------------------------------------|-------------|----------------------------------|--------------------|
+| `GLPI_URL`                             | ✅          | —                                | `VERDANADESK_URL`  |
+| `GLPI_USER_TOKEN`                      | ✅          | —                                | `USER_TOKEN`       |
+| `GLPI_APP_TOKEN`                       | ✅          | —                                | `APP_TOKEN`        |
+| `CATEGORIA_CONTRATACAO_IDS`            | ✅          | —                                | —                  |
+| `CATEGORIA_CONTRATACAO_ID_WITH_ASSETS` | ❌          | desativado                       | —                  |
+| `POLLING_INTERVAL`                     | ❌          | `300` (5 min)                    | —                  |
+| `EXCEL_PATH`                           | ❌          | `chamados_acompanhamento.xlsx`   | —                  |
 
 ---
 
