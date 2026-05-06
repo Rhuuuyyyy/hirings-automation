@@ -111,8 +111,15 @@ COLUNAS_EXCEL = [
     "Tempo para Solução",
     "Data de Abertura",
     "Requerente",
+    "Termo Status",
 ]
 
+# Texto canônico da tarefa de controle de ativo; a busca é case-insensitive.
+_TEXTO_TAREFA_TERMO = "Envio do termo de responsabilidade"
+
+# Estado GLPI de TicketTask: 1 = To do, 2 = Done  (Planning::TODO / Planning::DONE)
+# Se sua instância usar valores diferentes, ajuste apenas esta constante.
+_GLPI_TASK_STATE_DONE = 2
 
 
 # ============================================================================
@@ -151,6 +158,19 @@ def carregar_configuracoes() -> dict[str, Any]:
 
     logger.info("Categorias de contratação configuradas: %s", categoria_ids)
 
+    cat_ativo_raw = os.getenv("CATEGORIA_CONTRATACAO_ID_WITH_ASSETS", "").strip()
+    cat_id_com_ativo: int | None = None
+    if cat_ativo_raw:
+        try:
+            cat_id_com_ativo = int(cat_ativo_raw)
+            logger.info("Categoria com ativo configurada: %d", cat_id_com_ativo)
+        except ValueError:
+            logger.warning(
+                "CATEGORIA_CONTRATACAO_ID_WITH_ASSETS inválido ('%s'). "
+                "Ignorando — nenhum chamado receberá controle de termo.",
+                cat_ativo_raw,
+            )
+
     return {
         "GLPI_URL": glpi_url.rstrip("/"),
         "GLPI_USER_TOKEN": user_token,
@@ -158,6 +178,7 @@ def carregar_configuracoes() -> dict[str, Any]:
         "POLLING_INTERVAL": os.getenv("POLLING_INTERVAL", "300"),
         "EXCEL_PATH": os.getenv("EXCEL_PATH", "chamados_acompanhamento.xlsx"),
         "CATEGORIA_IDS": categoria_ids,
+        "CAT_ID_COM_ATIVO": cat_id_com_ativo,
     }
 
 
@@ -174,15 +195,23 @@ class ClienteGLPI:
     """
 
     def __init__(
-        self, base_url: str, app_token: str, user_token: str, categoria_ids: list[str]
+        self,
+        base_url: str,
+        app_token: str,
+        user_token: str,
+        categoria_ids: list[str],
+        cat_id_com_ativo: int | None = None,
     ) -> None:
         self.base_url = base_url
         self.app_token = app_token
         self.user_token = user_token
         self.categoria_ids = categoria_ids
+        self.cat_id_com_ativo = cat_id_com_ativo
         self.session_token: str | None = None
         self._session = requests.Session()
         self._cache_usuarios: dict[int, str] = {}
+        # Tickets cujo termo já foi confirmado como concluído não precisam de nova chamada API.
+        self._termos_concluidos: set[int] = set()
         self._iniciar_sessao()
 
     # --- Gerenciamento de sessão -------------------------------------------
@@ -242,6 +271,27 @@ class ClienteGLPI:
                 url_completa, response.status_code, response.text[:300],
             )
         response.raise_for_status()
+
+        if not response.text.strip():
+            return {}
+
+        return response.json()
+
+    def _post(self, url_completa: str, payload: dict) -> Any:
+        """POST resiliente: renova sessão e retenta uma vez em caso de 401/403."""
+        body = {"input": payload}
+        response = self._session.post(url_completa, json=body, timeout=HTTP_TIMEOUT)
+
+        if response.status_code in (401, 403):
+            self._renovar_sessao()
+            response = self._session.post(url_completa, json=body, timeout=HTTP_TIMEOUT)
+
+        if not response.ok:
+            logger.error(
+                "POST falhou [%s]. Status %s: %s",
+                url_completa, response.status_code, response.text[:300],
+            )
+            response.raise_for_status()
 
         if not response.text.strip():
             return {}
@@ -314,6 +364,8 @@ class ClienteGLPI:
                         except (ValueError, TypeError):
                             status_id = 0
                         if tid is not None and status_id in STATUSES_ATIVOS:
+                            # Injeta o ID de categoria para uso posterior em _chamado_para_linha
+                            item["_cat_id"] = int(cat_id)
                             todos[int(tid)] = item
                             ativos_pagina += 1
 
@@ -357,6 +409,55 @@ class ClienteGLPI:
         except Exception:
             pass
         return ""
+
+    def verificar_ou_criar_tarefa_termo(self, ticket_id: int) -> str:
+        """Garante que a tarefa de termo de responsabilidade existe no chamado.
+
+        Fluxo:
+        1. Tickets já confirmados como concluídos são respondidos do cache.
+        2. Lê todas as TicketTasks via GET /Ticket/{id}/TicketTask.
+        3. Procura a tarefa pelo texto (case-insensitive, ignorando HTML).
+        4. Se encontrada e concluída → armazena no cache e retorna 'Termo enviado'.
+        5. Se encontrada e pendente → retorna 'Pendente de envio'.
+        6. Se não encontrada → cria via POST e retorna 'Pendente de envio'.
+        7. Em caso de erro → loga e retorna 'Erro ao criar tarefa'.
+        """
+        if ticket_id in self._termos_concluidos:
+            return "Termo enviado"
+
+        try:
+            resp = self._get(f"{self.base_url}/Ticket/{ticket_id}/TicketTask")
+            tarefas: list[dict] = resp if isinstance(resp, list) else []
+
+            for tarefa in tarefas:
+                content_html = tarefa.get("content", "") or ""
+                # Remove tags HTML para comparação limpa
+                content_texto = re.sub(r"<[^>]+>", " ", content_html)
+                if _TEXTO_TAREFA_TERMO.lower() in content_texto.lower():
+                    try:
+                        state = int(tarefa.get("state", 0) or 0)
+                    except (ValueError, TypeError):
+                        state = 0
+                    if state >= _GLPI_TASK_STATE_DONE:
+                        self._termos_concluidos.add(ticket_id)
+                        logger.debug("Ticket #%d: termo concluído (state=%d).", ticket_id, state)
+                        return "Termo enviado"
+                    return "Pendente de envio"
+
+            # Tarefa não existe — criar
+            logger.info("Ticket #%d: tarefa '%s' não encontrada. Criando.", ticket_id, _TEXTO_TAREFA_TERMO)
+            self._post(
+                f"{self.base_url}/Ticket/{ticket_id}/TicketTask",
+                {"tickets_id": ticket_id, "content": _TEXTO_TAREFA_TERMO, "state": 1},
+            )
+            logger.info("Ticket #%d: tarefa de termo criada com sucesso.", ticket_id)
+            return "Pendente de envio"
+
+        except Exception as exc:
+            logger.error(
+                "Ticket #%d: erro ao verificar/criar tarefa de termo: %s", ticket_id, exc
+            )
+            return "Erro ao criar tarefa"
 
     def buscar_nome_usuario(self, user_id: int) -> str:
         """Retorna nome completo do usuário GLPI, com cache em memória."""
@@ -473,6 +574,16 @@ class SincronizadorExcel:
             if tempo_solucao:
                 logger.debug("Ticket #%d: 'Tempo para Solução' extraído do corpo.", ticket_id)
 
+        # Termo Status: depende da categoria do chamado.
+        # _cat_id é injetado por buscar_chamados_ativos(); itilcategories_id cobre API direta.
+        cat_id = chamado.get("_cat_id") or chamado.get("itilcategories_id")
+        cat_com_ativo = self.glpi.cat_id_com_ativo
+
+        if cat_com_ativo is not None and cat_id == cat_com_ativo:
+            termo_status = self.glpi.verificar_ou_criar_tarefa_termo(ticket_id)
+        else:
+            termo_status = "Sem equipamento"
+
         return {
             "ID do Chamado": ticket_id,
             "Título": chamado.get("1") or chamado.get("name") or "",
@@ -482,6 +593,7 @@ class SincronizadorExcel:
                 chamado.get("15") or chamado.get("date_creation")
             ),
             "Requerente": requerente,
+            "Termo Status": termo_status,
         }
 
     def sincronizar(self, chamados_api: list[dict]) -> None:
@@ -545,6 +657,7 @@ def main() -> None:
         app_token=config["GLPI_APP_TOKEN"],
         user_token=config["GLPI_USER_TOKEN"],
         categoria_ids=config["CATEGORIA_IDS"],
+        cat_id_com_ativo=config["CAT_ID_COM_ATIVO"],
     )
     sync = SincronizadorExcel(excel_path, glpi)
 
