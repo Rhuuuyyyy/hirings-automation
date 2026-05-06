@@ -595,6 +595,7 @@ class SincronizadorWebhook:
         """
         acao = payload.get("Acao", "?")
         tid  = payload.get("ID_do_Chamado", "?")
+        logger.info("Webhook payload [%s #%s]: %s", acao, tid, json.dumps(payload, ensure_ascii=False))
         try:
             resp = requests.post(self.webhook_url, json=payload, timeout=WEBHOOK_TIMEOUT)
             resp.raise_for_status()
@@ -606,6 +607,8 @@ class SincronizadorWebhook:
             )
         except requests.exceptions.RequestException as exc:
             logger.error("Webhook falhou [%s #%s]: %s", acao, tid, exc)
+            if exc.response is not None:
+                logger.error("Detalhe do Power Automate: %s", exc.response.text)
         except Exception as exc:
             logger.error("Erro inesperado no webhook [%s #%s]: %s", acao, tid, exc)
 
@@ -634,11 +637,15 @@ class SincronizadorWebhook:
 
             novo_cache[tid] = entrada_cache
 
-        # DELETE: IDs que existiam no cache mas não vieram na busca atual
+        # DELETE: IDs que existiam no cache mas não vieram na busca atual.
+        # Reenvia todos os campos do cache (schema completo exigido pelo Power Automate),
+        # sobrescrevendo apenas "Acao" para sinalizar a remoção.
         deletados = 0
         for tid, dados in self._cache.items():
             if tid not in novo_cache:
-                self._post_webhook({"Acao": "DELETE", "ID_do_Chamado": dados["ID_do_Chamado"]})
+                payload_delete = dict(dados)
+                payload_delete["Acao"] = "DELETE"
+                self._post_webhook(payload_delete)
                 deletados += 1
 
         # Atualiza estado em memória e persiste atomicamente
