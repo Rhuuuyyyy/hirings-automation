@@ -73,6 +73,8 @@ import re
 import pandas as pd
 import requests
 from dotenv import load_dotenv
+from openpyxl import load_workbook
+from openpyxl.styles import Alignment, Font, PatternFill
 
 # ============================================================================
 # Logging
@@ -491,6 +493,69 @@ def _formatar_datetime(valor: Any) -> str:
 
 
 # ============================================================================
+# Formatação Excel (openpyxl pós-salvamento)
+# ============================================================================
+
+# Colunas com conteúdo curto/fixo ficam centralizadas; as demais alinham à esquerda.
+_COLUNAS_CENTRADAS = frozenset({
+    "ID do Chamado", "Status", "Tempo para Solução", "Data de Abertura", "Termo Status"
+})
+
+# Cabeçalho: azul escuro corporativo (compatível com paleta padrão do Office).
+_COR_CABECALHO = "1F4E79"
+_LARGURA_MAXIMA_COLUNA = 65
+
+
+def _aplicar_formatacao_excel(caminho: Path) -> None:
+    """Abre o xlsx recém-gerado pelo pandas e aplica estilização via openpyxl.
+
+    Operações (em ordem):
+      1. Estilo do cabeçalho — negrito, fundo azul escuro, fonte branca, centralizado.
+      2. Freeze panes em A2 — cabeçalho fixo ao rolar.
+      3. AutoFilter na faixa completa de dados.
+      4. Largura automática de colunas baseada no maior conteúdo.
+      5. Alinhamento de células de dados: centro ou esquerda por coluna.
+    """
+    wb = load_workbook(caminho)
+    ws = wb.active
+
+    fill_cabecalho = PatternFill("solid", fgColor=_COR_CABECALHO)
+    fonte_cabecalho = Font(bold=True, color="FFFFFF", size=11)
+    alinhar_centro = Alignment(horizontal="center", vertical="center")
+    alinhar_esquerda = Alignment(horizontal="left", vertical="center")
+
+    # 1. Estilo do cabeçalho (linha 1)
+    for cell in ws[1]:
+        cell.fill = fill_cabecalho
+        cell.font = fonte_cabecalho
+        cell.alignment = alinhar_centro
+    ws.row_dimensions[1].height = 22
+
+    # 2. Freeze panes — mantém cabeçalho visível ao rolar para baixo
+    ws.freeze_panes = "A2"
+
+    # 3. AutoFilter cobrindo toda a faixa de dados
+    ws.auto_filter.ref = ws.dimensions
+
+    # 4 + 5. Largura de colunas e alinhamento de dados
+    for col_cells in ws.columns:
+        header_cell = col_cells[0]
+        col_name = header_cell.value or ""
+        is_centered = col_name in _COLUNAS_CENTRADAS
+
+        # Largura: máximo entre o cabeçalho e qualquer célula de dado
+        max_len = len(str(col_name))
+        for cell in col_cells[1:]:
+            if cell.value is not None:
+                max_len = max(max_len, len(str(cell.value)))
+            cell.alignment = alinhar_centro if is_centered else alinhar_esquerda
+
+        ws.column_dimensions[header_cell.column_letter].width = min(max_len + 4, _LARGURA_MAXIMA_COLUNA)
+
+    wb.save(caminho)
+
+
+# ============================================================================
 # Sincronizador Excel
 # ============================================================================
 
@@ -521,7 +586,6 @@ class SincronizadorExcel:
     def _salvar_df(self, df: pd.DataFrame) -> bool:
         try:
             df.to_excel(self.caminho, index=False)
-            return True
         except PermissionError:
             logger.warning(
                 "Arquivo '%s' está aberto por outro processo. "
@@ -532,6 +596,15 @@ class SincronizadorExcel:
         except Exception as exc:
             logger.error("Erro inesperado ao salvar planilha: %s", exc)
             return False
+
+        # Dados persistidos — aplicar formatação estética separadamente.
+        # Falha aqui não impede o ciclo de polling de continuar.
+        try:
+            _aplicar_formatacao_excel(self.caminho)
+        except Exception as exc:
+            logger.warning("Formatação do Excel falhou (dados salvos normalmente): %s", exc)
+
+        return True
 
     def _chamado_para_linha(self, chamado: dict) -> dict | None:
         """Converte um ticket da API em linha do DataFrame.
