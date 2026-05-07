@@ -295,29 +295,6 @@
     .theme-switching, .theme-switching *, .theme-switching *::before, .theme-switching *::after {
       transition: none !important;
     }
-
-    /* Slide-over */
-    #slideover-backdrop {
-      transition: opacity 0.28s ease;
-      opacity: 0;
-      pointer-events: none;
-    }
-    #slideover-backdrop.open { opacity: 1; pointer-events: auto; }
-    #slideover {
-      transition: transform 0.28s cubic-bezier(.4,0,.2,1), opacity 0.28s ease;
-      transform: translateX(100%);
-      opacity: 0;
-      pointer-events: none;
-    }
-    #slideover.open { transform: translateX(0); opacity: 1; pointer-events: auto; }
-
-    /* KPI strip */
-    .kpi-card { flex: 1; overflow: hidden; }
-    .kpi-card + .kpi-card { border-left: 1px solid var(--line); }
-
-    /* Date inputs */
-    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); cursor: pointer; }
-    [data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator { filter: none; }
   </style>
 </head>
 
@@ -446,15 +423,6 @@
         </div>
       </header>
 
-      <!-- KPI Sparklines strip -->
-      <div id="kpi-strip" class="flex-shrink-0 mx-6 mb-3 rounded-lg border hairline-2 overflow-hidden flex" style="background: var(--surface);">
-        <div class="kpi-card h-[88px] flex items-center justify-center" style="color: var(--text-4);">
-          <svg class="w-4 h-4 spin" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-          </svg>
-        </div>
-      </div>
-
       <!-- Toolbar: search + filters + view -->
       <div class="flex-shrink-0 px-6 pb-3">
         <div class="flex items-center gap-3 flex-wrap">
@@ -485,24 +453,6 @@
             </button>
           </div>
 
-          <!-- Date range filter -->
-          <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-md border hairline-2 text-[12px]" style="background: var(--surface); color: var(--text-2);">
-            <svg class="w-3 h-3 flex-shrink-0" style="color: var(--text-3);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-            </svg>
-            <input id="filter-data-de" type="date" onchange="dateFilterDe=this.value; renderTabela();"
-              class="bg-transparent outline-none mono text-[11px] cursor-pointer w-[96px]"
-              style="color: var(--text-2);" title="De (data de abertura)"/>
-            <span style="color: var(--text-4);">—</span>
-            <input id="filter-data-ate" type="date" onchange="dateFilterAte=this.value; renderTabela();"
-              class="bg-transparent outline-none mono text-[11px] cursor-pointer w-[96px]"
-              style="color: var(--text-2);" title="Até (data de abertura)"/>
-            <button id="date-clear-btn" onclick="limparDatas()" class="hidden p-0.5 rounded" style="color: var(--text-4);" title="Limpar datas"
-              onmouseover="this.style.color='var(--text-2)'" onmouseout="this.style.color='var(--text-4)'">
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
-          </div>
-
           <div class="flex-1"></div>
 
           <!-- Right side controls -->
@@ -511,26 +461,6 @@
             <div class="flex items-center rounded-md border hairline-2 p-0.5" style="background: var(--surface);">
               <button class="density-btn px-2 py-1 rounded text-[11px] mono uppercase tracking-wider transition-colors" data-density="comfy" style="color: var(--text-3);">cf</button>
               <button class="density-btn px-2 py-1 rounded text-[11px] mono uppercase tracking-wider transition-colors active-density" data-density="dense" style="color: var(--text);">dn</button>
-            </div>
-
-            <!-- Export dropdown -->
-            <div class="relative" id="export-wrap">
-              <button onclick="toggleExportMenu()" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border hairline-2 text-[12px] transition-colors hover:border-[var(--line-2)] hover:text-[var(--text)]" style="background: var(--surface); color: var(--text-2);" title="Exportar">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                </svg>
-                <span>Export</span>
-              </button>
-              <div id="export-menu" class="hidden absolute right-0 mt-1 rounded-md border hairline-2 py-1 z-20 min-w-[148px]" style="background: var(--surface); box-shadow: 0 8px 24px rgba(0,0,0,0.35);">
-                <button onclick="exportar('xlsx')" class="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left" style="color: var(--text-2);" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
-                  <svg class="w-3.5 h-3.5" style="color: var(--ok);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5l2 2h5a2 2 0 012 2v14a2 2 0 01-2 2z"/></svg>
-                  Excel (.xlsx)
-                </button>
-                <button onclick="exportar('csv')" class="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left" style="color: var(--text-2);" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
-                  <svg class="w-3.5 h-3.5" style="color: var(--info);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-                  CSV (.csv)
-                </button>
-              </div>
             </div>
 
             <!-- Refresh -->
@@ -662,91 +592,6 @@
     </div>
 
   </main>
-
-  <!-- ═══════════════════════════════════════════
-       SLIDE-OVER: Timeline do Chamado
-  ═══════════════════════════════════════════ -->
-  <div id="slideover-backdrop" onclick="closeSlideover()"
-    class="fixed inset-0 z-30" style="background: rgba(0,0,0,0.55); backdrop-filter: blur(2px);"></div>
-
-  <div id="slideover" class="fixed top-0 right-0 h-full w-[460px] max-w-full z-40 flex flex-col border-l hairline" style="background: var(--bg-2);">
-
-    <!-- Cabeçalho -->
-    <div class="flex-shrink-0 flex items-center justify-between px-5 py-3.5 border-b hairline" style="background: var(--surface);">
-      <div class="flex items-center gap-3">
-        <div class="w-7 h-7 rounded flex items-center justify-center" style="background: var(--accent-bg); border: 1px solid var(--accent-line);">
-          <svg class="w-3.5 h-3.5" style="color: var(--accent);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-          </svg>
-        </div>
-        <div>
-          <p class="text-[10px] mono uppercase tracking-[0.14em]" style="color: var(--text-3);">Timeline · Chamado</p>
-          <p id="so-id" class="text-[13px] font-semibold mono" style="color: var(--accent);">—</p>
-        </div>
-      </div>
-      <button onclick="closeSlideover()" class="p-1.5 rounded transition-colors"
-        style="color: var(--text-3);" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-        </svg>
-      </button>
-    </div>
-
-    <!-- Corpo rolável -->
-    <div class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-
-      <!-- Título -->
-      <div>
-        <p class="text-[10px] mono uppercase tracking-[0.14em] mb-1.5" style="color: var(--text-3);">Título</p>
-        <p id="so-titulo" class="text-[14px] font-medium leading-snug" style="color: var(--text);">—</p>
-      </div>
-
-      <!-- Grid de metadados -->
-      <div class="grid grid-cols-2 gap-2.5">
-        <div class="rounded-md px-3 py-2.5 border hairline-2" style="background: var(--surface);">
-          <p class="text-[10px] mono uppercase tracking-[0.14em] mb-1" style="color: var(--text-3);">Requerente</p>
-          <p id="so-requerente" class="text-[12.5px] font-medium truncate" style="color: var(--text);">—</p>
-        </div>
-        <div class="rounded-md px-3 py-2.5 border hairline-2" style="background: var(--surface);">
-          <p class="text-[10px] mono uppercase tracking-[0.14em] mb-1.5" style="color: var(--text-3);">Status</p>
-          <div id="so-status"></div>
-        </div>
-        <div class="rounded-md px-3 py-2.5 border hairline-2" style="background: var(--surface);">
-          <p class="text-[10px] mono uppercase tracking-[0.14em] mb-1" style="color: var(--text-3);">Abertura</p>
-          <p id="so-abertura" class="text-[11.5px] mono" style="color: var(--text-2);">—</p>
-        </div>
-        <div class="rounded-md px-3 py-2.5 border hairline-2" style="background: var(--surface);">
-          <p class="text-[10px] mono uppercase tracking-[0.14em] mb-1.5" style="color: var(--text-3);">SLA · Prazo</p>
-          <div id="so-sla"></div>
-        </div>
-      </div>
-
-      <!-- Card de Termo -->
-      <div id="so-termo" class="rounded-md px-4 py-3 border hairline-2" style="background: var(--surface);"></div>
-
-      <!-- Separador -->
-      <div class="border-t hairline"></div>
-
-      <!-- Linha do tempo -->
-      <div>
-        <p class="text-[10px] mono uppercase tracking-[0.14em] mb-4" style="color: var(--text-3);">Linha do tempo</p>
-        <div id="so-timeline"></div>
-      </div>
-    </div>
-
-    <!-- Rodapé -->
-    <div class="flex-shrink-0 px-5 py-3 border-t hairline flex items-center justify-between" style="background: var(--surface);">
-      <p class="text-[10.5px]" style="color: var(--text-4);">Dados do snapshot GLPI</p>
-      <button onclick="exportarChamadoAtual()"
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded text-[12px] font-medium transition-colors"
-        style="background: var(--accent-bg); border: 1px solid var(--accent-line); color: var(--accent-2);">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-        </svg>
-        Exportar este chamado
-      </button>
-    </div>
-  </div>
 
 <script>
   // ═══════════════════════════════════════════════════════
@@ -933,10 +778,6 @@
   let searchQuery = '';
   let sortKey = 'Data_Abertura';
   let sortDir = 'desc';
-  let dateFilterDe = '';
-  let dateFilterAte = '';
-  let displayedRows = [];
-  let historico = [];
 
   async function fetchContratacoes() {
     setSyncStatus('loading');
@@ -949,7 +790,6 @@
       const data = await resp.json();
       allChamados = Array.isArray(data.chamados) ? data.chamados : [];
       atualizarHeader(data);
-      renderKPIs();
       renderTabela();
       setSyncStatus('ok');
       setSyncLabel('Em sincronia');
@@ -995,19 +835,6 @@
     }
   }
 
-  function parseDateBR(str) {
-    if (!str) return null;
-    const m = String(str).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-    return m ? new Date(`${m[3]}-${m[2]}-${m[1]}`) : null;
-  }
-
-  function limparDatas() {
-    dateFilterDe = ''; dateFilterAte = '';
-    document.getElementById('filter-data-de').value = '';
-    document.getElementById('filter-data-ate').value = '';
-    renderTabela();
-  }
-
   function applyFilters() {
     let rows = allChamados.slice();
     if (activeStatusFilter !== 'all') {
@@ -1020,22 +847,6 @@
         String(c.Titulo || '').toLowerCase().includes(q) ||
         String(c.Requerente || '').toLowerCase().includes(q)
       );
-    }
-    if (dateFilterDe || dateFilterAte) {
-      const de  = dateFilterDe  ? new Date(dateFilterDe)  : null;
-      const ate = dateFilterAte ? new Date(dateFilterAte) : null;
-      rows = rows.filter(c => {
-        const d = parseDateBR(c.Data_Abertura);
-        if (!d) return false;
-        if (de  && d < de)  return false;
-        if (ate && d > ate) return false;
-        return true;
-      });
-      const btn = document.getElementById('date-clear-btn');
-      if (btn) btn.classList.remove('hidden');
-    } else {
-      const btn = document.getElementById('date-clear-btn');
-      if (btn) btn.classList.add('hidden');
     }
     rows.sort((a, b) => {
       const av = a[sortKey] ?? ''; const bv = b[sortKey] ?? '';
@@ -1061,12 +872,11 @@
       return;
     }
 
-    displayedRows = rows;
     tbody.innerHTML = rows.map((c, i) => {
       const alert = rowAlertLevel(c);
       const alertAttr = alert ? ` data-alert="${alert}"` : '';
       return `
-      <tr class="row-enter border-t hairline"${alertAttr} style="animation-delay: ${Math.min(i, 20) * 12}ms; border-color: var(--line); cursor: pointer;" onclick="openSlideover(${i})">
+      <tr class="row-enter border-t hairline"${alertAttr} style="animation-delay: ${Math.min(i, 20) * 12}ms; border-color: var(--line);">
         <td class="px-4 align-middle whitespace-nowrap mono text-[11.5px]" style="color: var(--text-3);">#${escHtml(c.ID_do_Chamado)}</td>
         <td class="px-4 align-middle max-w-[420px]">
           <span class="truncate-2 text-[12.5px] font-medium" style="color: var(--text);" title="${escHtml(c.Titulo)}">${escHtml(c.Titulo) || '—'}</span>
@@ -1137,195 +947,6 @@
   }
 
   // ═══════════════════════════════════════════════════════
-  // KPI Sparklines
-  // ═══════════════════════════════════════════════════════
-  async function fetchHistorico() {
-    try {
-      const r = await fetch('/api/historico');
-      if (r.ok) historico = await r.json();
-    } catch (_) {}
-    renderKPIs();
-  }
-
-  const KPI_CFGS = [
-    { label: 'Total de chamados', key: 'total',          cssVar: '--accent' },
-    { label: 'Pendente de envio', key: 'pendente_envio', cssVar: '--warn'   },
-    { label: 'Sem equipamento',   key: 'sem_equipamento',cssVar: '--text-3' },
-  ];
-
-  function sparklineSVG(values, cssVar) {
-    if (!values || values.length < 2) return '';
-    const W = 200, H = 40;
-    const min = Math.min(...values), max = Math.max(...values);
-    const range = max - min || 1;
-    const pts = values.map((v, i) => {
-      const x = (i / (values.length - 1)) * W;
-      const y = H - ((v - min) / range) * (H - 4) - 2;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    });
-    const pathD = `M ${pts.join(' L ')}`;
-    const areaD = `${pathD} L ${W},${H} L 0,${H} Z`;
-    return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:40px;display:block;">
-      <path d="${areaD}" style="fill: var(${cssVar}); opacity: 0.08;"/>
-      <path d="${pathD}" style="fill:none; stroke: var(${cssVar}); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round;"/>
-    </svg>`;
-  }
-
-  function renderKPIs() {
-    const strip = document.getElementById('kpi-strip');
-    if (!strip) return;
-
-    const contagens = {};
-    allChamados.forEach(c => { contagens[c.Termo_Status] = (contagens[c.Termo_Status] || 0) + 1; });
-    const current = {
-      total:           allChamados.length,
-      pendente_envio:  contagens['Pendente de envio']  || 0,
-      sem_equipamento: contagens['Sem equipamento']    || 0,
-    };
-
-    strip.innerHTML = KPI_CFGS.map(cfg => {
-      const val     = current[cfg.key] ?? 0;
-      const series  = historico.map(h => h[cfg.key] ?? 0);
-      const prev    = series.length >= 2 ? series[series.length - 2] : null;
-      let deltaHtml = '';
-      if (prev !== null) {
-        const delta = val - prev;
-        const sign  = delta > 0 ? '+' : '';
-        const good  = (cfg.key === 'total') ? (delta <= 0) : (delta <= 0);
-        const dColor = delta === 0 ? 'var(--text-4)' : good ? 'var(--ok)' : 'var(--err)';
-        deltaHtml = `<span class="mono text-[10px]" style="color:${dColor};">${sign}${delta} vs ontem</span>`;
-      }
-      return `<div class="kpi-card">
-        <div class="flex items-start justify-between px-4 pt-3 pb-1">
-          <div>
-            <p class="text-[10px] mono uppercase tracking-[0.14em] mb-1" style="color: var(--text-3);">${escHtml(cfg.label)}</p>
-            <p class="text-[22px] font-semibold mono tracking-tight leading-none" style="color: var(${cfg.cssVar});">${val}</p>
-            <div class="mt-1 h-4">${deltaHtml}</div>
-          </div>
-        </div>
-        <div class="mt-1">${series.length >= 2 ? sparklineSVG(series, cfg.cssVar) : '<div style="height:40px;background:var(--surface-2);"></div>'}</div>
-      </div>`;
-    }).join('');
-  }
-
-  // ═══════════════════════════════════════════════════════
-  // Export
-  // ═══════════════════════════════════════════════════════
-  function toggleExportMenu() {
-    document.getElementById('export-menu').classList.toggle('hidden');
-  }
-  document.addEventListener('click', e => {
-    const w = document.getElementById('export-wrap');
-    if (w && !w.contains(e.target)) document.getElementById('export-menu').classList.add('hidden');
-  });
-  function exportar(formato) {
-    document.getElementById('export-menu').classList.add('hidden');
-    window.location.href = `/api/contratacoes/export?formato=${formato}`;
-  }
-
-  // ═══════════════════════════════════════════════════════
-  // Slide-over Timeline
-  // ═══════════════════════════════════════════════════════
-  let currentTicket = null;
-
-  function openSlideover(idx) {
-    const c = displayedRows[idx];
-    if (!c) return;
-    currentTicket = c;
-
-    document.getElementById('so-id').textContent      = `#${c.ID_do_Chamado}`;
-    document.getElementById('so-titulo').textContent  = c.Titulo || '—';
-    document.getElementById('so-requerente').textContent = c.Requerente || '—';
-    document.getElementById('so-abertura').textContent = c.Data_Abertura || '—';
-    document.getElementById('so-status').innerHTML    = statusPill(c.Status);
-    document.getElementById('so-sla').innerHTML       = slaCell(c.Tempo_Solucao);
-    document.getElementById('so-termo').innerHTML     = buildTermoCard(c);
-    document.getElementById('so-timeline').innerHTML  = buildTimeline(c);
-
-    document.getElementById('slideover').classList.add('open');
-    document.getElementById('slideover-backdrop').classList.add('open');
-  }
-
-  function closeSlideover() {
-    document.getElementById('slideover').classList.remove('open');
-    document.getElementById('slideover-backdrop').classList.remove('open');
-  }
-
-  function buildTimeline(c) {
-    const events = [];
-
-    if (c.Data_Abertura) {
-      events.push({ done: true,  color: 'var(--info)',   label: 'Chamado aberto',     detail: c.Data_Abertura });
-    }
-    const inProgress = ['Em Atendimento','Pendente','Solucionado','Fechado'].includes(c.Status);
-    if (inProgress) {
-      events.push({ done: true,  color: 'var(--warn)',   label: 'Em atendimento',      detail: 'Ticket assumido pela equipe de TI' });
-    }
-
-    const termoEv = {
-      'Termo enviado':      { done: true,  color: 'var(--ok)',   label: 'Termo de responsabilidade', detail: 'Enviado e concluído com sucesso' },
-      'Pendente de envio':  { done: false, color: 'var(--warn)', label: 'Termo de responsabilidade', detail: 'Aguardando envio ao colaborador' },
-      'Erro ao criar tarefa':{ done: false,color: 'var(--err)',  label: 'Termo de responsabilidade', detail: 'Erro ao verificar tarefas no GLPI' },
-      'Sem equipamento':    { done: true,  color: 'var(--text-4)',label: 'Equipamento',               detail: 'Categoria sem envio de equipamento' },
-    }[c.Termo_Status];
-    if (termoEv) events.push(termoEv);
-
-    const isSolved = ['Solucionado','Fechado'].includes(c.Status);
-    if (c.Tempo_Solucao) {
-      events.push({ done: isSolved, color: isSolved ? 'var(--ok)' : 'var(--text-4)', label: isSolved ? 'Solucionado' : 'Prazo para solução', detail: c.Tempo_Solucao });
-    }
-
-    if (!events.length) return `<p class="text-[12px]" style="color: var(--text-4);">Nenhum evento disponível no snapshot.</p>`;
-
-    return events.map((ev, i) => {
-      const isLast = i === events.length - 1;
-      const checkSvg = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5" style="color:#fff;"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`;
-      const clockSvg = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" style="color:#fff;"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l2 2"/></svg>`;
-      return `<div class="flex gap-3">
-        <div class="flex flex-col items-center">
-          <div class="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center" style="background: ${ev.color};">${ev.done ? checkSvg : clockSvg}</div>
-          ${!isLast ? `<div class="w-px flex-1 my-1 min-h-[20px]" style="background: var(--line);"></div>` : ''}
-        </div>
-        <div class="pb-4 flex-1 min-w-0 pt-0.5">
-          <p class="text-[12.5px] font-medium" style="color: var(--text);">${escHtml(ev.label)}</p>
-          <p class="text-[11.5px] mt-0.5" style="color: var(--text-3);">${escHtml(ev.detail)}</p>
-        </div>
-      </div>`;
-    }).join('');
-  }
-
-  function buildTermoCard(c) {
-    const cfgMap = {
-      'Termo enviado':      { bg: 'rgba(74,222,128,0.08)',  border: 'rgba(74,222,128,0.25)',  icon: TERMO_ICON['Termo enviado'],       iconColor: 'var(--ok)',   title: 'Termo OK',             sub: 'O termo de responsabilidade foi enviado e concluído.' },
-      'Pendente de envio':  { bg: 'rgba(251,191,36,0.08)',  border: 'rgba(251,191,36,0.25)',  icon: TERMO_ICON['Pendente de envio'],   iconColor: 'var(--warn)', title: 'Pendente de envio',    sub: 'A tarefa existe no GLPI mas ainda não foi concluída.' },
-      'Erro ao criar tarefa':{ bg:'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.25)', icon: TERMO_ICON['Erro ao criar tarefa'],iconColor: 'var(--err)',  title: 'Erro ao criar tarefa', sub: 'Ocorreu um erro ao verificar as tarefas no GLPI.' },
-      'Sem equipamento':    { bg: 'rgba(68,68,78,0.15)',    border: 'var(--line)',            icon: TERMO_ICON['Sem equipamento'],     iconColor: 'var(--text-4)',title: 'Sem equipamento',      sub: 'Categoria sem envio de equipamento.' },
-    };
-    const cfg = cfgMap[c.Termo_Status] || cfgMap['Sem equipamento'];
-    return `<div class="flex items-start gap-3">
-      <div class="w-8 h-8 rounded flex-shrink-0 flex items-center justify-center" style="background: ${cfg.bg}; border: 1px solid ${cfg.border}; color: ${cfg.iconColor};">
-        ${cfg.icon}
-      </div>
-      <div>
-        <p class="text-[12.5px] font-semibold" style="color: var(--text);">${escHtml(cfg.title)}</p>
-        <p class="text-[11.5px] mt-0.5" style="color: var(--text-3);">${escHtml(cfg.sub)}</p>
-      </div>
-    </div>`;
-  }
-
-  function exportarChamadoAtual() {
-    if (!currentTicket) return;
-    const cols    = ['ID_do_Chamado','Titulo','Status','Tempo_Solucao','Data_Abertura','Requerente','Termo_Status'];
-    const headers = ['ID','Título','Status','Tempo p/ Solução','Data de Abertura','Requerente','Status do Termo'];
-    const row = cols.map(k => `"${String(currentTicket[k] || '').replace(/"/g,'""')}"`).join(',');
-    const blob = new Blob([headers.join(',') + '\r\n' + row], { type: 'text/csv;charset=utf-8;' });
-    const url  = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url;
-    a.download = `chamado_${currentTicket.ID_do_Chamado}.csv`; a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  // ═══════════════════════════════════════════════════════
   // Filters wiring
   // ═══════════════════════════════════════════════════════
   document.querySelectorAll('.chip').forEach(chip => {
@@ -1387,8 +1008,6 @@
         searchQuery = '';
         renderTabela();
       }
-    } else if (e.key === 'Escape' && !inField) {
-      closeSlideover();
     } else if ((e.key === 'r' || e.key === 'R') && !inField) {
       forcarAtualizacao();
     }
@@ -1397,7 +1016,6 @@
   // ═══════════════════════════════════════════════════════
   // Init
   // ═══════════════════════════════════════════════════════
-  fetchHistorico();
   fetchContratacoes();
 </script>
 </body>
