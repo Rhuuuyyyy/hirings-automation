@@ -106,7 +106,7 @@ STATUS_MAP: dict[int, str] = {
 
 STATUSES_ATIVOS = frozenset({1, 2, 3, 4})
 
-_TEXTO_TAREFA_TERMO   = "Envio do termo de responsabilidade"
+_TEXTO_TAREFA_TERMO   = "Enviar termo de responsabilidade"
 _GLPI_TASK_STATE_DONE = 2
 
 # ============================================================================
@@ -343,10 +343,14 @@ class ClienteGLPI:
             pass
         return ""
 
-    def verificar_ou_criar_tarefa_termo(self, ticket_id: int) -> str:
-        """Lê/cria a tarefa de termo de responsabilidade e retorna seu status."""
+    def verificar_tarefa_termo(self, ticket_id: int) -> str:
+        """Verifica (SOMENTE LEITURA) se existe tarefa de termo e retorna seu status.
+
+        Nunca cria nem altera tarefas no GLPI.
+        Retorna um de: "Termo OK" | "Pendente" | "Sem tarefa" | "Erro ao verificar"
+        """
         if ticket_id in self._termos_concluidos:
-            return "Termo enviado"
+            return "Termo OK"
         try:
             resp = self._get(f"{self.base_url}/Ticket/{ticket_id}/TicketTask")
             tarefas: list[dict] = resp if isinstance(resp, list) else []
@@ -360,17 +364,14 @@ class ClienteGLPI:
                     if state >= _GLPI_TASK_STATE_DONE:
                         self._termos_concluidos.add(ticket_id)
                         logger.debug("Ticket #%d: termo concluído.", ticket_id)
-                        return "Termo enviado"
-                    return "Pendente de envio"
-            logger.info("Ticket #%d: criando tarefa de termo.", ticket_id)
-            self._post(
-                f"{self.base_url}/Ticket/{ticket_id}/TicketTask",
-                {"tickets_id": ticket_id, "content": _TEXTO_TAREFA_TERMO, "state": 1},
-            )
-            return "Pendente de envio"
+                        return "Termo OK"
+                    return "Pendente"
+            # Tarefa não encontrada — NÃO cria. Apenas informa.
+            logger.debug("Ticket #%d: tarefa de termo não encontrada.", ticket_id)
+            return "Sem tarefa"
         except Exception as exc:
-            logger.error("Ticket #%d: erro na tarefa de termo: %s", ticket_id, exc)
-            return "Erro ao criar tarefa"
+            logger.error("Ticket #%d: erro ao verificar termo: %s", ticket_id, exc)
+            return "Erro ao verificar"
 
     def buscar_nome_usuario(self, user_id: int) -> str:
         """Retorna nome completo do usuário GLPI, com cache em memória."""
@@ -453,9 +454,9 @@ class SincronizadorDB:
 
         cat_id = chamado.get("_cat_id") or chamado.get("itilcategories_id")
         if self.glpi.cat_id_com_ativo is not None and cat_id == self.glpi.cat_id_com_ativo:
-            termo_status = self.glpi.verificar_ou_criar_tarefa_termo(ticket_id)
+            termo_status = self.glpi.verificar_tarefa_termo(ticket_id)
         else:
-            termo_status = "Sem equipamento"
+            termo_status = "Sem tarefa"
 
         return {
             "ID_do_Chamado": ticket_id,
@@ -498,10 +499,12 @@ class SincronizadorDB:
         entrada = {
             "data":             hoje,
             "total":            len(linhas),
-            "termo_enviado":    contagens.get("Termo enviado", 0),
-            "pendente_envio":   contagens.get("Pendente de envio", 0),
-            "sem_equipamento":  contagens.get("Sem equipamento", 0),
-            "erro_criar_tarefa":contagens.get("Erro ao criar tarefa", 0),
+            "em_atendimento":   sum(1 for l in linhas if l.get("Status") == "Em Atendimento"),
+            "pendente":         sum(1 for l in linhas if l.get("Status") == "Pendente"),
+            "termo_ok":         contagens.get("Termo OK", 0),
+            "termo_pendente":   contagens.get("Pendente", 0),
+            "sem_tarefa":       contagens.get("Sem tarefa", 0),
+            "erro_verificar":   contagens.get("Erro ao verificar", 0),
         }
 
         hist_path = HISTORICO_PATH
