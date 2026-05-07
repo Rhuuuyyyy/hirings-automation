@@ -1,11 +1,13 @@
 # Credentials — never commit
 .env
 
-# Output files
+# Database (gerada pelo sync worker — não versionada)
+database/*.json
+database/*.json.tmp
+
+# Legado
 chamados_acompanhamento.xlsx
 *.xlsx
-
-# Cache de estado entre ciclos (pode conter dados de chamados)
 cache_chamados.json
 cache_chamados.json.tmp
 

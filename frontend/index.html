@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hub de Automações</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .row-enter { animation: fadeSlideIn 0.25s ease forwards; }
+
+    /* Barra de progresso do countdown */
+    @keyframes shrink {
+      from { width: 100%; }
+      to   { width: 0%; }
+    }
+    .progress-bar {
+      animation: shrink 10s linear forwards;
+    }
+    .progress-bar.paused { animation-play-state: paused; }
+  </style>
+</head>
+
+<body class="h-full bg-slate-100 flex overflow-hidden">
+
+  <!-- ═══════════════════════════════════════════
+       SIDEBAR
+  ═══════════════════════════════════════════ -->
+  <aside class="w-64 flex-shrink-0 bg-slate-900 flex flex-col shadow-2xl z-10">
+
+    <!-- Logo -->
+    <div class="px-6 py-5 border-b border-slate-700">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">HA</div>
+        <div>
+          <p class="text-white font-semibold text-sm leading-tight">Hub de</p>
+          <p class="text-indigo-300 font-semibold text-sm leading-tight">Automações</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navegação -->
+    <nav class="flex-1 px-3 py-4 space-y-1">
+      <p class="px-3 pt-1 pb-2 text-xs font-semibold text-slate-500 uppercase tracking-widest">Módulos</p>
+
+      <button
+        onclick="showPage('contratacoes')"
+        id="nav-contratacoes"
+        class="nav-item active w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
+      >
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+        Contratações GLPI
+      </button>
+
+      <button
+        onclick="showPage('em-breve')"
+        id="nav-em-breve"
+        class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
+      >
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+        Em Breve
+      </button>
+    </nav>
+
+    <!-- Status de sync no rodapé da sidebar -->
+    <div class="px-4 py-4 border-t border-slate-700">
+      <div class="flex items-center gap-2 mb-2">
+        <div id="sync-dot" class="w-2 h-2 rounded-full bg-slate-500 transition-colors duration-300"></div>
+        <span id="sync-label" class="text-xs text-slate-400">Aguardando...</span>
+      </div>
+      <!-- Barra de progresso do countdown -->
+      <div class="h-1 bg-slate-700 rounded-full overflow-hidden">
+        <div id="progress-bar" class="h-full bg-indigo-500 rounded-full progress-bar"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ═══════════════════════════════════════════
+       CONTEÚDO PRINCIPAL
+  ═══════════════════════════════════════════ -->
+  <main class="flex-1 overflow-auto">
+
+    <!-- ─── PÁGINA: Contratações ─── -->
+    <div id="page-contratacoes">
+
+      <!-- Header da página -->
+      <div class="bg-white border-b border-slate-200 px-8 py-5">
+        <div class="flex items-center justify-between">
+          <div>
+            <h1 class="text-xl font-bold text-slate-900">Contratações GLPI</h1>
+            <p id="ultima-atualizacao" class="text-sm text-slate-400 mt-0.5">
+              Carregando dados...
+            </p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span id="total-badge"
+              class="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 text-sm font-semibold px-4 py-2 rounded-full border border-indigo-200">
+              <span id="total-count">—</span> chamados ativos
+            </span>
+            <button
+              onclick="forcarAtualizacao()"
+              class="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              title="Atualizar agora"
+            >
+              <svg id="refresh-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabela -->
+      <div class="p-8">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-200">
+                  <th class="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">ID</th>
+                  <th class="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Título</th>
+                  <th class="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Status</th>
+                  <th class="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Tempo p/ Solução</th>
+                  <th class="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Abertura</th>
+                  <th class="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Requerente</th>
+                  <th class="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Termo</th>
+                </tr>
+              </thead>
+              <tbody id="tabela-body">
+                <tr>
+                  <td colspan="7" class="text-center py-16 text-slate-400">
+                    <div class="flex flex-col items-center gap-2">
+                      <svg class="w-8 h-8 text-slate-300 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                      </svg>
+                      <span class="text-sm">Conectando ao servidor...</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── PÁGINA: Em Breve ─── -->
+    <div id="page-em-breve" class="hidden">
+      <div class="bg-white border-b border-slate-200 px-8 py-5">
+        <h1 class="text-xl font-bold text-slate-900">Em Breve</h1>
+        <p class="text-sm text-slate-400 mt-0.5">Novos módulos de automação</p>
+      </div>
+      <div class="flex flex-col items-center justify-center py-32 text-center px-8">
+        <div class="w-20 h-20 bg-indigo-50 rounded-2xl flex items-center justify-center mb-6">
+          <svg class="w-10 h-10 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-800 mb-2">Novos módulos em desenvolvimento</h2>
+        <p class="text-slate-500 max-w-md">
+          Mais automações serão integradas ao hub em breve. Cada módulo aparecerá
+          aqui na sidebar quando estiver pronto.
+        </p>
+      </div>
+    </div>
+
+  </main>
+</body>
+
+<script>
+  // ═══════════════════════════════════════════════════════
+  // Estilos de navegação
+  // ═══════════════════════════════════════════════════════
+  const NAV_ACTIVE   = 'bg-indigo-600 text-white shadow-sm';
+  const NAV_INACTIVE = 'text-slate-400 hover:bg-slate-800 hover:text-slate-200';
+
+  function showPage(page) {
+    ['contratacoes', 'em-breve'].forEach(p => {
+      const el = document.getElementById(`page-${p}`);
+      const nav = document.getElementById(`nav-${p}`);
+      if (p === page) {
+        el.classList.remove('hidden');
+        nav.classList.remove(...NAV_INACTIVE.split(' '));
+        nav.classList.add(...NAV_ACTIVE.split(' '));
+      } else {
+        el.classList.add('hidden');
+        nav.classList.remove(...NAV_ACTIVE.split(' '));
+        nav.classList.add(...NAV_INACTIVE.split(' '));
+      }
+    });
+  }
+
+  // Aplica estado inicial
+  showPage('contratacoes');
+
+  // ═══════════════════════════════════════════════════════
+  // Badges de status e termo
+  // ═══════════════════════════════════════════════════════
+  const STATUS_CLASSES = {
+    'Novo':            'bg-blue-50 text-blue-700 ring-1 ring-blue-200',
+    'Em Atendimento':  'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+    'Pendente':        'bg-orange-50 text-orange-700 ring-1 ring-orange-200',
+    'Solucionado':     'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+    'Fechado':         'bg-slate-100 text-slate-500 ring-1 ring-slate-200',
+  };
+
+  const TERMO_CLASSES = {
+    'Termo enviado':        'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+    'Pendente de envio':    'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+    'Sem equipamento':      'bg-slate-100 text-slate-500 ring-1 ring-slate-200',
+    'Erro ao criar tarefa': 'bg-red-50 text-red-700 ring-1 ring-red-200',
+  };
+
+  function badge(text, map) {
+    const cls = map[text] || 'bg-slate-100 text-slate-500 ring-1 ring-slate-200';
+    return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${cls}">${escHtml(text) || '—'}</span>`;
+  }
+
+  function escHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // Countdown e barra de progresso
+  // ═══════════════════════════════════════════════════════
+  let countdownTimer = null;
+  let secondsLeft = 10;
+
+  function resetProgressBar() {
+    const bar = document.getElementById('progress-bar');
+    // Reinicia a animação removendo e re-adicionando a classe
+    bar.classList.remove('progress-bar');
+    void bar.offsetWidth; // force reflow
+    bar.classList.add('progress-bar');
+  }
+
+  function startCountdown() {
+    clearInterval(countdownTimer);
+    secondsLeft = 10;
+    resetProgressBar();
+    setSyncLabel(`Próxima atualização em ${secondsLeft}s`);
+    countdownTimer = setInterval(() => {
+      secondsLeft--;
+      if (secondsLeft <= 0) {
+        clearInterval(countdownTimer);
+        fetchContratacoes();
+      } else {
+        setSyncLabel(`Próxima atualização em ${secondsLeft}s`);
+      }
+    }, 1000);
+  }
+
+  function setSyncLabel(text) {
+    document.getElementById('sync-label').textContent = text;
+  }
+
+  function setSyncStatus(state) {
+    const dot = document.getElementById('sync-dot');
+    const classes = {
+      ok:      'bg-emerald-400',
+      loading: 'bg-amber-400 animate-pulse',
+      error:   'bg-red-400',
+      idle:    'bg-slate-500',
+    };
+    dot.className = `w-2 h-2 rounded-full transition-colors duration-300 ${classes[state] || classes.idle}`;
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // Fetch de dados
+  // ═══════════════════════════════════════════════════════
+  async function fetchContratacoes() {
+    setSyncStatus('loading');
+    setSyncLabel('Atualizando...');
+
+    const refreshIcon = document.getElementById('refresh-icon');
+    refreshIcon.classList.add('animate-spin');
+
+    try {
+      const resp = await fetch('/api/contratacoes');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+
+      renderTabela(data);
+      atualizarHeader(data);
+      setSyncStatus('ok');
+    } catch (err) {
+      console.error('[fetch]', err);
+      setSyncStatus('error');
+      setSyncLabel('Erro ao conectar');
+      document.getElementById('ultima-atualizacao').textContent = `Erro: ${err.message}`;
+    } finally {
+      refreshIcon.classList.remove('animate-spin');
+      startCountdown();
+    }
+  }
+
+  function atualizarHeader(data) {
+    const total = data.total ?? 0;
+    document.getElementById('total-count').textContent = total;
+
+    if (data.ultima_atualizacao) {
+      const d = new Date(data.ultima_atualizacao);
+      document.getElementById('ultima-atualizacao').textContent =
+        `Snapshot do GLPI: ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
+    } else {
+      document.getElementById('ultima-atualizacao').textContent = 'Aguardando primeiro ciclo do GLPI Sync...';
+    }
+  }
+
+  function renderTabela(data) {
+    const tbody = document.getElementById('tabela-body');
+
+    if (!data.chamados || data.chamados.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7" class="text-center py-16">
+            <div class="flex flex-col items-center gap-3 text-slate-400">
+              <svg class="w-10 h-10 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+              </svg>
+              <p class="text-sm font-medium">Nenhum chamado ativo no momento</p>
+              <p class="text-xs text-slate-300">O GLPI Sync está rodando e atualizará automaticamente.</p>
+            </div>
+          </td>
+        </tr>`;
+      return;
+    }
+
+    tbody.innerHTML = data.chamados.map((c, i) => `
+      <tr class="row-enter border-b border-slate-100 hover:bg-indigo-50/40 transition-colors duration-100"
+          style="animation-delay: ${i * 15}ms">
+        <td class="px-5 py-3.5 font-mono text-xs text-slate-400 whitespace-nowrap">#${c.ID_do_Chamado}</td>
+        <td class="px-5 py-3.5 text-slate-800 font-medium max-w-xs">
+          <span class="line-clamp-2" title="${escHtml(c.Titulo)}">${escHtml(c.Titulo)}</span>
+        </td>
+        <td class="px-5 py-3.5 whitespace-nowrap">${badge(c.Status, STATUS_CLASSES)}</td>
+        <td class="px-5 py-3.5 text-slate-600 text-xs whitespace-nowrap">${escHtml(c.Tempo_Solucao) || '<span class="text-slate-300">—</span>'}</td>
+        <td class="px-5 py-3.5 text-slate-600 text-xs whitespace-nowrap">${escHtml(c.Data_Abertura) || '<span class="text-slate-300">—</span>'}</td>
+        <td class="px-5 py-3.5 text-slate-700 max-w-[160px]">
+          <span class="truncate block" title="${escHtml(c.Requerente)}">${escHtml(c.Requerente) || '<span class="text-slate-300">—</span>'}</span>
+        </td>
+        <td class="px-5 py-3.5 whitespace-nowrap">${badge(c.Termo_Status, TERMO_CLASSES)}</td>
+      </tr>
+    `).join('');
+  }
+
+  function forcarAtualizacao() {
+    clearInterval(countdownTimer);
+    fetchContratacoes();
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // Inicialização
+  // ═══════════════════════════════════════════════════════
+  fetchContratacoes();
+</script>
+</html>
