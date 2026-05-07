@@ -496,13 +496,12 @@ class SincronizadorDB:
             contagens[ts] = contagens.get(ts, 0) + 1
 
         entrada = {
-            "data":            hoje,
-            "total":           len(linhas),
-            "termo_ok":        contagens.get("Termo OK", 0),
-            "pendente":        contagens.get("Pendente", 0),
-            "sem_tarefa":      contagens.get("Sem tarefa", 0),
-            "erro_verificar":  contagens.get("Erro ao verificar", 0),
-            "sem_equipamento": contagens.get("Sem equipamento", 0),
+            "data":             hoje,
+            "total":            len(linhas),
+            "termo_enviado":    contagens.get("Termo enviado", 0),
+            "pendente_envio":   contagens.get("Pendente de envio", 0),
+            "sem_equipamento":  contagens.get("Sem equipamento", 0),
+            "erro_criar_tarefa":contagens.get("Erro ao criar tarefa", 0),
         }
 
         hist_path = HISTORICO_PATH
