@@ -17,6 +17,40 @@
       to   { width: 0%; }
     }
     .progress-bar { animation: shrink 10s linear forwards; }
+
+    /* Slide-over */
+    #slideover {
+      transition: transform 0.3s cubic-bezier(.4,0,.2,1), opacity 0.3s ease;
+      transform: translateX(100%);
+      opacity: 0;
+      pointer-events: none;
+    }
+    #slideover.open {
+      transform: translateX(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #slideover-backdrop {
+      transition: opacity 0.3s ease;
+      opacity: 0;
+      pointer-events: none;
+    }
+    #slideover-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* Timeline vertical line */
+    .tl-line { border-left: 2px solid #E2E8F0; }
+
+    /* Sparkline */
+    .sparkline-path { fill: none; stroke-width: 2; }
+    .sparkline-area { opacity: 0.12; }
+
+    /* Scrollbar slim */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
   </style>
 </head>
 
@@ -72,7 +106,7 @@
   <!-- ═══════════════════════════════════════════
        CONTEÚDO PRINCIPAL
   ═══════════════════════════════════════════ -->
-  <main class="flex-1 overflow-auto">
+  <main class="flex-1 overflow-auto relative">
 
     <!-- ─── PÁGINA: Contratações ─── -->
     <div id="page-contratacoes">
@@ -88,6 +122,39 @@
             <span class="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 text-sm font-semibold px-4 py-2 rounded-full border border-indigo-200">
               <span id="total-count">—</span> chamados ativos
             </span>
+            <!-- Export dropdown -->
+            <div class="relative" id="export-wrapper">
+              <button onclick="toggleExportMenu()"
+                class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                Exportar
+                <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </button>
+              <div id="export-menu"
+                class="hidden absolute right-0 mt-1 w-44 bg-white rounded-lg border border-slate-200 shadow-lg py-1 z-20">
+                <button onclick="exportar('xlsx')"
+                  class="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                  <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5l2 2h5a2 2 0 012 2v14a2 2 0 01-2 2z"/>
+                  </svg>
+                  Excel (.xlsx)
+                </button>
+                <button onclick="exportar('csv')"
+                  class="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                  <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                  </svg>
+                  CSV (.csv)
+                </button>
+              </div>
+            </div>
             <button onclick="forcarAtualizacao()"
               class="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors" title="Atualizar agora">
               <svg id="refresh-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -102,10 +169,19 @@
       <div class="px-8 pt-6 pb-8 space-y-5">
 
         <!-- ──────────────────────────────────────────
+             KPI SPARKLINES
+        ─────────────────────────────────────────── -->
+        <div id="kpi-section" class="grid grid-cols-3 gap-4">
+          <!-- preenchido por renderKPIs() -->
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 animate-pulse h-28"></div>
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 animate-pulse h-28"></div>
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 animate-pulse h-28"></div>
+        </div>
+
+        <!-- ──────────────────────────────────────────
              ÁREA DE CONTROLE DE TERMOS
         ─────────────────────────────────────────── -->
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <!-- Cabeçalho da seção -->
           <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
             <div class="flex items-center gap-2">
               <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -122,18 +198,66 @@
               Limpar filtro
             </button>
           </div>
-
-          <!-- Cards de termo — gerados via JS -->
           <div id="termo-controls" class="grid grid-cols-4 divide-x divide-slate-100">
             <!-- preenchido por renderTermoControls() -->
           </div>
         </div>
 
         <!-- ──────────────────────────────────────────
+             BARRA DE BUSCA E FILTROS
+        ─────────────────────────────────────────── -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm px-5 py-3 flex flex-wrap items-center gap-3">
+          <!-- Busca de texto -->
+          <div class="relative flex-1 min-w-[200px]">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"/>
+            </svg>
+            <input id="search-input" type="text" placeholder="Buscar por ID, título ou requerente..."
+              oninput="aplicarFiltros()"
+              class="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition">
+          </div>
+
+          <!-- Filtro de Status -->
+          <div class="relative">
+            <select id="filter-status" onchange="aplicarFiltros()"
+              class="pl-3 pr-8 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 appearance-none cursor-pointer">
+              <option value="">Todos os status</option>
+              <option value="Novo">Novo</option>
+              <option value="Em Atendimento">Em Atendimento</option>
+              <option value="Pendente">Pendente</option>
+            </select>
+            <svg class="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </div>
+
+          <!-- Filtro de data de abertura (de) -->
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-400 whitespace-nowrap">Abertura:</span>
+            <input id="filter-data-de" type="date" onchange="aplicarFiltros()"
+              class="px-2 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
+            <span class="text-xs text-slate-400">até</span>
+            <input id="filter-data-ate" type="date" onchange="aplicarFiltros()"
+              class="px-2 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
+          </div>
+
+          <!-- Limpar filtros de busca -->
+          <button id="clear-search-btn" onclick="limparBusca()"
+            class="hidden items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+            Limpar busca
+          </button>
+
+          <!-- Contador de resultados -->
+          <span id="search-count" class="hidden text-xs text-slate-400 ml-auto whitespace-nowrap"></span>
+        </div>
+
+        <!-- ──────────────────────────────────────────
              TABELA DE CHAMADOS
         ─────────────────────────────────────────── -->
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <!-- Barra de título da tabela com indicador de filtro ativo -->
           <div class="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
             <span class="text-sm font-semibold text-slate-700">Chamados</span>
             <span id="filter-indicator" class="hidden items-center gap-1.5 bg-indigo-50 text-indigo-600 text-xs font-medium px-2.5 py-1 rounded-full">
@@ -194,313 +318,709 @@
     </div>
 
   </main>
+
+  <!-- ═══════════════════════════════════════════
+       SLIDE-OVER: Timeline do Chamado
+  ═══════════════════════════════════════════ -->
+  <div id="slideover-backdrop"
+    onclick="closeSlideover()"
+    class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-30">
+  </div>
+
+  <div id="slideover"
+    class="fixed top-0 right-0 h-full w-[480px] max-w-full bg-white shadow-2xl z-40 flex flex-col">
+    <!-- Cabeçalho do slide-over -->
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
+          <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </div>
+        <div>
+          <p class="text-xs text-slate-400 font-medium">Detalhes do Chamado</p>
+          <p id="so-ticket-id" class="text-sm font-bold text-slate-800">—</p>
+        </div>
+      </div>
+      <button onclick="closeSlideover()"
+        class="p-2 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Corpo rolável -->
+    <div class="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+
+      <!-- Título e badges -->
+      <div>
+        <h2 id="so-titulo" class="text-base font-semibold text-slate-900 leading-snug mb-3">—</h2>
+        <div class="flex flex-wrap gap-2" id="so-badges"></div>
+      </div>
+
+      <!-- Grid de metadados -->
+      <div class="grid grid-cols-2 gap-3">
+        <div class="bg-slate-50 rounded-lg px-4 py-3">
+          <p class="text-xs text-slate-400 font-medium mb-1">Requerente</p>
+          <p id="so-requerente" class="text-sm font-semibold text-slate-800">—</p>
+        </div>
+        <div class="bg-slate-50 rounded-lg px-4 py-3">
+          <p class="text-xs text-slate-400 font-medium mb-1">Tempo p/ Solução</p>
+          <p id="so-solucao" class="text-sm font-semibold text-slate-800">—</p>
+        </div>
+      </div>
+
+      <!-- Linha do tempo -->
+      <div>
+        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-4">Linha do Tempo</p>
+        <div id="so-timeline" class="space-y-0">
+          <!-- preenchido por JS -->
+        </div>
+      </div>
+
+      <!-- Status do Termo (card destacado) -->
+      <div id="so-termo-card" class="rounded-xl border p-4">
+        <!-- preenchido por JS -->
+      </div>
+
+    </div>
+
+    <!-- Rodapé com ação de exportar este chamado -->
+    <div class="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+      <p class="text-xs text-slate-400">Dados do snapshot GLPI</p>
+      <button id="so-export-btn" onclick="exportarChamadoAtual()"
+        class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+        </svg>
+        Exportar este chamado
+      </button>
+    </div>
+  </div>
+
 </body>
 
 <script>
-  // ═══════════════════════════════════════════════════════
-  // Navegação entre páginas
-  // ═══════════════════════════════════════════════════════
-  const NAV_ACTIVE   = 'bg-indigo-600 text-white shadow-sm';
-  const NAV_INACTIVE = 'text-slate-400 hover:bg-slate-800 hover:text-slate-200';
+// ═══════════════════════════════════════════════════════
+// Navegação entre páginas
+// ═══════════════════════════════════════════════════════
+const NAV_ACTIVE   = 'bg-indigo-600 text-white shadow-sm';
+const NAV_INACTIVE = 'text-slate-400 hover:bg-slate-800 hover:text-slate-200';
 
-  function showPage(page) {
-    ['contratacoes', 'em-breve'].forEach(p => {
-      const el  = document.getElementById(`page-${p}`);
-      const nav = document.getElementById(`nav-${p}`);
-      const isTarget = p === page;
-      el.classList.toggle('hidden', !isTarget);
-      nav.className = nav.className.replace(/bg-indigo-600 text-white shadow-sm|text-slate-400 hover:bg-slate-800 hover:text-slate-200/g, '').trim();
-      nav.classList.add(...(isTarget ? NAV_ACTIVE : NAV_INACTIVE).split(' '));
+function showPage(page) {
+  ['contratacoes', 'em-breve'].forEach(p => {
+    const el  = document.getElementById(`page-${p}`);
+    const nav = document.getElementById(`nav-${p}`);
+    const isTarget = p === page;
+    el.classList.toggle('hidden', !isTarget);
+    nav.className = nav.className.replace(/bg-indigo-600 text-white shadow-sm|text-slate-400 hover:bg-slate-800 hover:text-slate-200/g, '').trim();
+    nav.classList.add(...(isTarget ? NAV_ACTIVE : NAV_INACTIVE).split(' '));
+  });
+}
+showPage('contratacoes');
+
+// ═══════════════════════════════════════════════════════
+// Badges
+// ═══════════════════════════════════════════════════════
+const STATUS_CLASSES = {
+  'Novo':           'bg-blue-50 text-blue-700 ring-1 ring-blue-200',
+  'Em Atendimento': 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+  'Pendente':       'bg-orange-50 text-orange-700 ring-1 ring-orange-200',
+  'Solucionado':    'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+  'Fechado':        'bg-slate-100 text-slate-500 ring-1 ring-slate-200',
+};
+
+const TERMO_CLASSES = {
+  'Termo OK':          'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+  'Pendente':          'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+  'Sem tarefa':        'bg-red-50 text-red-700 ring-1 ring-red-200',
+  'Erro ao verificar': 'bg-rose-50 text-rose-700 ring-1 ring-rose-200',
+  'Sem equipamento':   'bg-slate-100 text-slate-500 ring-1 ring-slate-200',
+};
+
+function badge(text, map) {
+  const cls = map[text] || 'bg-slate-100 text-slate-500 ring-1 ring-slate-200';
+  return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${cls}">${escHtml(text) || '—'}</span>`;
+}
+
+function escHtml(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ═══════════════════════════════════════════════════════
+// KPI SPARKLINES
+// ═══════════════════════════════════════════════════════
+let historicoData = [];
+
+async function fetchHistorico() {
+  try {
+    const r = await fetch('/api/historico');
+    historicoData = await r.json();
+    renderKPIs();
+  } catch (_) { /* silently skip if no history yet */ }
+}
+
+const KPI_CONFIGS = [
+  {
+    label: 'Total de Chamados Ativos',
+    key: 'total',
+    color: '#6366F1',
+    colorLight: '#EEF2FF',
+    fmt: v => v,
+  },
+  {
+    label: 'Termos Pendentes',
+    key: 'pendente',
+    color: '#F59E0B',
+    colorLight: '#FFFBEB',
+    fmt: v => v,
+  },
+  {
+    label: 'Sem Tarefa de Termo',
+    key: 'sem_tarefa',
+    color: '#EF4444',
+    colorLight: '#FEF2F2',
+    fmt: v => v,
+  },
+];
+
+function sparklineSVG(values, color, colorLight) {
+  if (!values || values.length < 2) return '';
+  const W = 140, H = 44;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * W;
+    const y = H - ((v - min) / range) * (H - 4) - 2;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const pathD = `M ${pts.join(' L ')}`;
+  const areaD = `M ${pts[0]} L ${pts.join(' L ')} L ${W},${H} L 0,${H} Z`;
+  return `
+    <svg viewBox="0 0 ${W} ${H}" class="w-full" preserveAspectRatio="none" style="height:44px">
+      <path d="${areaD}" fill="${color}" opacity="0.12"/>
+      <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>`;
+}
+
+function renderKPIs() {
+  const section = document.getElementById('kpi-section');
+  if (!section) return;
+
+  // use last data for current value
+  const current = lastData || {};
+  const chamados = current.chamados || [];
+  const contagens = {};
+  chamados.forEach(c => { contagens[c.Termo_Status] = (contagens[c.Termo_Status] || 0) + 1; });
+  const totais = {
+    total:    current.total || 0,
+    pendente: contagens['Pendente'] || 0,
+    sem_tarefa: contagens['Sem tarefa'] || 0,
+  };
+
+  section.innerHTML = KPI_CONFIGS.map(cfg => {
+    const valAtual = totais[cfg.key] ?? 0;
+    const series = historicoData.map(h => h[cfg.key] ?? 0);
+    const prev = series.length >= 2 ? series[series.length - 2] : null;
+    let deltaHtml = '';
+    if (prev !== null) {
+      const delta = valAtual - prev;
+      const sign  = delta > 0 ? '+' : '';
+      const dCls  = delta > 0
+        ? (cfg.key === 'total' ? 'text-slate-500' : 'text-red-500')
+        : (delta < 0 ? 'text-emerald-600' : 'text-slate-400');
+      deltaHtml = `<span class="text-xs font-medium ${dCls}">${sign}${delta} vs ontem</span>`;
+    }
+
+    return `
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="px-5 pt-4 pb-2 flex items-start justify-between">
+          <div>
+            <p class="text-xs text-slate-400 font-medium mb-1">${escHtml(cfg.label)}</p>
+            <p class="text-3xl font-bold tabular-nums" style="color:${cfg.color}">${valAtual}</p>
+            <div class="mt-1 h-4">${deltaHtml}</div>
+          </div>
+          <div class="w-2 h-2 rounded-full mt-1" style="background:${cfg.color}"></div>
+        </div>
+        <div class="px-0 pb-0 mt-1">
+          ${series.length >= 2 ? sparklineSVG(series, cfg.color, cfg.colorLight) : '<div class="h-11 bg-slate-50"></div>'}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// Estado de filtro de Termos
+// ═══════════════════════════════════════════════════════
+let currentTermoFilter = null;
+let lastData = null;
+
+const TERMO_CARDS = [
+  {
+    key:     'Termo OK',
+    urgent:  false,
+    countCls:  'text-emerald-600',
+    labelCls:  'text-emerald-500',
+    hoverBg:   'hover:bg-emerald-50',
+    activeBg:  'bg-emerald-50',
+    activeRing:'ring-2 ring-emerald-300',
+    dotCls:    'bg-emerald-400',
+  },
+  {
+    key:     'Pendente',
+    urgent:  true,
+    countCls:  'text-amber-600',
+    labelCls:  'text-amber-500',
+    hoverBg:   'hover:bg-amber-50',
+    activeBg:  'bg-amber-50',
+    activeRing:'ring-2 ring-amber-300',
+    dotCls:    'bg-amber-400',
+  },
+  {
+    key:     'Sem tarefa',
+    urgent:  true,
+    countCls:  'text-red-600',
+    labelCls:  'text-red-500',
+    hoverBg:   'hover:bg-red-50',
+    activeBg:  'bg-red-50',
+    activeRing:'ring-2 ring-red-300',
+    dotCls:    'bg-red-400',
+  },
+  {
+    key:     'Erro ao verificar',
+    urgent:  false,
+    countCls:  'text-rose-600',
+    labelCls:  'text-rose-500',
+    hoverBg:   'hover:bg-rose-50',
+    activeBg:  'bg-rose-50',
+    activeRing:'ring-2 ring-rose-300',
+    dotCls:    'bg-rose-400',
+  },
+];
+
+function setTermoFilter(key) {
+  currentTermoFilter = (currentTermoFilter === key) ? null : key;
+  if (lastData) {
+    renderTermoControls(lastData.chamados || []);
+    aplicarFiltros();
+  }
+}
+
+function renderTermoControls(chamados) {
+  const counts = {};
+  chamados.forEach(c => { counts[c.Termo_Status] = (counts[c.Termo_Status] || 0) + 1; });
+
+  const clearBtn  = document.getElementById('termo-clear-btn');
+  const hasFilter = currentTermoFilter !== null;
+  clearBtn.classList.toggle('hidden', !hasFilter);
+  clearBtn.classList.toggle('flex',    hasFilter);
+
+  document.getElementById('termo-controls').innerHTML = TERMO_CARDS.map(cfg => {
+    const count    = counts[cfg.key] || 0;
+    const isActive = currentTermoFilter === cfg.key;
+    const isUrgent = cfg.urgent && count > 0;
+    const bgCls    = isActive ? `${cfg.activeBg} ${cfg.activeRing}` : cfg.hoverBg;
+    const cntCls   = count > 0 ? cfg.countCls : 'text-slate-400';
+    const lblCls   = count > 0 ? cfg.labelCls : 'text-slate-400';
+    const urgBadge = isUrgent
+      ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-600">Ação</span>` : '';
+    const dot = isActive ? `<span class="w-1.5 h-1.5 rounded-full ${cfg.dotCls}"></span>` : '';
+    return `
+      <button onclick="setTermoFilter('${cfg.key}')"
+        class="relative p-5 text-left transition-all duration-150 ${bgCls} focus:outline-none"
+        title="${isActive ? 'Clique para remover o filtro' : `Filtrar por: ${cfg.key}`}">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide leading-none">${escHtml(cfg.key)}</span>
+          <div class="flex items-center gap-1.5">${urgBadge}${dot}</div>
+        </div>
+        <p class="text-3xl font-bold tabular-nums ${cntCls}">${count}</p>
+        <p class="text-xs mt-1 ${lblCls}">chamado${count !== 1 ? 's' : ''}${isActive ? ' · filtrado' : ''}</p>
+      </button>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// Busca + Filtros combinados
+// ═══════════════════════════════════════════════════════
+function parseDateBR(str) {
+  // "DD/MM/YYYY HH:MM" or "DD/MM/YYYY"
+  if (!str) return null;
+  const m = str.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (!m) return null;
+  return new Date(`${m[3]}-${m[2]}-${m[1]}`);
+}
+
+function aplicarFiltros() {
+  if (!lastData) return;
+  const all = lastData.chamados || [];
+
+  const q      = (document.getElementById('search-input').value || '').trim().toLowerCase();
+  const status = document.getElementById('filter-status').value;
+  const dataDe = document.getElementById('filter-data-de').value;  // YYYY-MM-DD
+  const dataAte= document.getElementById('filter-data-ate').value;
+
+  // Filtro de Termo card
+  let chamados = currentTermoFilter
+    ? all.filter(c => c.Termo_Status === currentTermoFilter)
+    : all;
+
+  // Filtro de busca textual
+  if (q) {
+    chamados = chamados.filter(c =>
+      String(c.ID_do_Chamado).includes(q) ||
+      (c.Titulo    || '').toLowerCase().includes(q) ||
+      (c.Requerente|| '').toLowerCase().includes(q)
+    );
+  }
+
+  // Filtro de status
+  if (status) chamados = chamados.filter(c => c.Status === status);
+
+  // Filtro de data de abertura
+  if (dataDe || dataAte) {
+    const de  = dataDe  ? new Date(dataDe)  : null;
+    const ate = dataAte ? new Date(dataAte) : null;
+    chamados = chamados.filter(c => {
+      const d = parseDateBR(c.Data_Abertura);
+      if (!d) return false;
+      if (de  && d < de)  return false;
+      if (ate && d > ate) return false;
+      return true;
     });
   }
-  showPage('contratacoes');
 
-  // ═══════════════════════════════════════════════════════
-  // Badges
-  // ═══════════════════════════════════════════════════════
-  const STATUS_CLASSES = {
-    'Novo':           'bg-blue-50 text-blue-700 ring-1 ring-blue-200',
-    'Em Atendimento': 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-    'Pendente':       'bg-orange-50 text-orange-700 ring-1 ring-orange-200',
-    'Solucionado':    'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
-    'Fechado':        'bg-slate-100 text-slate-500 ring-1 ring-slate-200',
-  };
+  const hasBusca = q || status || dataDe || dataAte;
+  const clearBtn = document.getElementById('clear-search-btn');
+  clearBtn.classList.toggle('hidden',  !hasBusca);
+  clearBtn.classList.toggle('flex',     hasBusca);
 
-  // Valores atualizados conforme nova regra de negócio do backend
-  const TERMO_CLASSES = {
-    'Termo OK':          'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
-    'Pendente':          'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-    'Sem tarefa':        'bg-red-50 text-red-700 ring-1 ring-red-200',
-    'Erro ao verificar': 'bg-rose-50 text-rose-700 ring-1 ring-rose-200',
-  };
-
-  function badge(text, map) {
-    const cls = map[text] || 'bg-slate-100 text-slate-500 ring-1 ring-slate-200';
-    return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${cls}">${escHtml(text) || '—'}</span>`;
+  const countEl = document.getElementById('search-count');
+  if (hasBusca) {
+    countEl.classList.remove('hidden');
+    countEl.textContent = `${chamados.length} resultado${chamados.length !== 1 ? 's' : ''}`;
+  } else {
+    countEl.classList.add('hidden');
   }
 
-  function escHtml(str) {
-    return String(str || '')
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  // Indicador de filtro de termo na barra da tabela
+  const indicator = document.getElementById('filter-indicator');
+  if (currentTermoFilter) {
+    indicator.classList.remove('hidden');
+    indicator.classList.add('inline-flex');
+    indicator.textContent = `Filtrando: ${currentTermoFilter} (${chamados.length})`;
+  } else {
+    indicator.classList.add('hidden');
+    indicator.classList.remove('inline-flex');
   }
 
-  // ═══════════════════════════════════════════════════════
-  // Estado de filtro de Termos
-  // ═══════════════════════════════════════════════════════
-  let currentTermoFilter = null;
-  let lastData = null;  // cache do último fetch para re-renderizar sem nova chamada
+  renderTabelaFiltrada(chamados);
+}
 
-  // Configuração dos 4 cards — cores escritas como strings completas para o CDN Tailwind
-  const TERMO_CARDS = [
-    {
-      key:     'Termo OK',
-      urgent:  false,
-      countCls:  'text-emerald-600',
-      labelCls:  'text-emerald-500',
-      hoverBg:   'hover:bg-emerald-50',
-      activeBg:  'bg-emerald-50',
-      activeRing:'ring-2 ring-emerald-300',
-      dotCls:    'bg-emerald-400',
-    },
-    {
-      key:     'Pendente',
-      urgent:  true,
-      countCls:  'text-amber-600',
-      labelCls:  'text-amber-500',
-      hoverBg:   'hover:bg-amber-50',
-      activeBg:  'bg-amber-50',
-      activeRing:'ring-2 ring-amber-300',
-      dotCls:    'bg-amber-400',
-    },
-    {
-      key:     'Sem tarefa',
-      urgent:  true,
-      countCls:  'text-red-600',
-      labelCls:  'text-red-500',
-      hoverBg:   'hover:bg-red-50',
-      activeBg:  'bg-red-50',
-      activeRing:'ring-2 ring-red-300',
-      dotCls:    'bg-red-400',
-    },
-    {
-      key:     'Erro ao verificar',
-      urgent:  false,
-      countCls:  'text-rose-600',
-      labelCls:  'text-rose-500',
-      hoverBg:   'hover:bg-rose-50',
-      activeBg:  'bg-rose-50',
-      activeRing:'ring-2 ring-rose-300',
-      dotCls:    'bg-rose-400',
-    },
-  ];
+function limparBusca() {
+  document.getElementById('search-input').value = '';
+  document.getElementById('filter-status').value = '';
+  document.getElementById('filter-data-de').value = '';
+  document.getElementById('filter-data-ate').value = '';
+  aplicarFiltros();
+}
 
-  function setTermoFilter(key) {
-    // Toggle: clicar no card ativo limpa o filtro
-    currentTermoFilter = (currentTermoFilter === key) ? null : key;
-    if (lastData) {
-      renderTermoControls(lastData.chamados || []);
-      renderTabela(lastData);
-    }
+// ═══════════════════════════════════════════════════════
+// Slide-over Timeline
+// ═══════════════════════════════════════════════════════
+let currentTicket = null;
+
+function openSlideover(chamado) {
+  currentTicket = chamado;
+  document.getElementById('so-ticket-id').textContent = `#${chamado.ID_do_Chamado}`;
+  document.getElementById('so-titulo').textContent    = chamado.Titulo || '—';
+  document.getElementById('so-requerente').textContent = chamado.Requerente || '—';
+  document.getElementById('so-solucao').textContent   = chamado.Tempo_Solucao || '—';
+
+  document.getElementById('so-badges').innerHTML =
+    badge(chamado.Status, STATUS_CLASSES) + ' ' + badge(chamado.Termo_Status, TERMO_CLASSES);
+
+  // Timeline
+  const tl = buildTimeline(chamado);
+  document.getElementById('so-timeline').innerHTML = tl;
+
+  // Termo card
+  document.getElementById('so-termo-card').innerHTML = buildTermoCard(chamado);
+
+  document.getElementById('slideover').classList.add('open');
+  document.getElementById('slideover-backdrop').classList.add('open');
+}
+
+function closeSlideover() {
+  document.getElementById('slideover').classList.remove('open');
+  document.getElementById('slideover-backdrop').classList.remove('open');
+}
+
+function buildTimeline(c) {
+  const events = [];
+
+  if (c.Data_Abertura) {
+    events.push({
+      icon: '📋',
+      label: 'Chamado aberto',
+      detail: c.Data_Abertura,
+      color: 'bg-blue-500',
+      done: true,
+    });
   }
 
-  function renderTermoControls(chamados) {
-    const counts = {};
-    chamados.forEach(c => { counts[c.Termo_Status] = (counts[c.Termo_Status] || 0) + 1; });
+  if (c.Status === 'Em Atendimento' || c.Status === 'Pendente' || c.Status === 'Solucionado' || c.Status === 'Fechado') {
+    events.push({
+      icon: '⚙️',
+      label: 'Em atendimento',
+      detail: 'Ticket assumido pela equipe de TI',
+      color: 'bg-amber-400',
+      done: true,
+    });
+  }
 
-    const container  = document.getElementById('termo-controls');
-    const clearBtn   = document.getElementById('termo-clear-btn');
-    const hasFilter  = currentTermoFilter !== null;
+  const termoEv = buildTermoEvent(c);
+  if (termoEv) events.push(termoEv);
 
-    clearBtn.classList.toggle('hidden', !hasFilter);
-    clearBtn.classList.toggle('flex',    hasFilter);
+  if (c.Tempo_Solucao) {
+    const isSolved = c.Status === 'Solucionado' || c.Status === 'Fechado';
+    events.push({
+      icon: isSolved ? '✅' : '⏱️',
+      label: isSolved ? 'Solucionado' : 'Prazo para solução',
+      detail: c.Tempo_Solucao,
+      color: isSolved ? 'bg-emerald-500' : 'bg-slate-300',
+      done: isSolved,
+    });
+  }
 
-    container.innerHTML = TERMO_CARDS.map(cfg => {
-      const count    = counts[cfg.key] || 0;
-      const isActive = currentTermoFilter === cfg.key;
-      const isUrgent = cfg.urgent && count > 0;
+  if (!events.length) {
+    return '<p class="text-sm text-slate-400">Nenhum evento disponível no snapshot.</p>';
+  }
 
-      const bgCls   = isActive ? `${cfg.activeBg} ${cfg.activeRing}` : cfg.hoverBg;
-      const cntCls  = (count > 0) ? cfg.countCls : 'text-slate-400';
-      const lblCls  = (count > 0) ? cfg.labelCls : 'text-slate-400';
-
-      const urgentBadge = isUrgent
-        ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-600">Ação</span>`
-        : '';
-
-      const activeDot = isActive
-        ? `<span class="w-1.5 h-1.5 rounded-full ${cfg.dotCls}"></span>`
-        : '';
-
-      return `
-        <button
-          onclick="setTermoFilter('${cfg.key}')"
-          class="relative p-5 text-left transition-all duration-150 ${bgCls} focus:outline-none"
-          title="${isActive ? 'Clique para remover o filtro' : `Filtrar por: ${cfg.key}`}"
-        >
-          <div class="flex items-center justify-between mb-3">
-            <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide leading-none">${escHtml(cfg.key)}</span>
-            <div class="flex items-center gap-1.5">
-              ${urgentBadge}
-              ${activeDot}
-            </div>
+  return events.map((ev, i) => {
+    const isLast = i === events.length - 1;
+    return `
+      <div class="flex gap-3">
+        <div class="flex flex-col items-center">
+          <div class="w-8 h-8 rounded-full ${ev.color} flex items-center justify-center text-sm flex-shrink-0 shadow-sm">
+            ${ev.done ? `<svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>` : `<svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`}
           </div>
-          <p class="text-3xl font-bold tabular-nums ${cntCls}">${count}</p>
-          <p class="text-xs mt-1 ${lblCls}">
-            chamado${count !== 1 ? 's' : ''}${isActive ? ' · filtrado' : ''}
-          </p>
-        </button>
-      `;
-    }).join('');
-  }
+          ${!isLast ? '<div class="w-0.5 flex-1 bg-slate-200 my-1 min-h-[24px]"></div>' : ''}
+        </div>
+        <div class="pb-5 flex-1 min-w-0">
+          <p class="text-sm font-semibold text-slate-800">${escHtml(ev.label)}</p>
+          <p class="text-xs text-slate-400 mt-0.5">${escHtml(ev.detail)}</p>
+        </div>
+      </div>`;
+  }).join('');
+}
 
-  // ═══════════════════════════════════════════════════════
-  // Countdown e barra de progresso
-  // ═══════════════════════════════════════════════════════
-  let countdownTimer = null;
-  let secondsLeft = 10;
+function buildTermoEvent(c) {
+  const ts = c.Termo_Status;
+  const map = {
+    'Termo OK':          { color: 'bg-emerald-500', done: true,  label: 'Termo de responsabilidade',  detail: 'Enviado e concluído' },
+    'Pendente':          { color: 'bg-amber-400',   done: false, label: 'Termo de responsabilidade',  detail: 'Aguardando envio ao colaborador' },
+    'Sem tarefa':        { color: 'bg-red-500',     done: false, label: 'Termo de responsabilidade',  detail: 'Tarefa não encontrada no GLPI' },
+    'Erro ao verificar': { color: 'bg-rose-400',    done: false, label: 'Termo de responsabilidade',  detail: 'Erro ao verificar status no GLPI' },
+    'Sem equipamento':   { color: 'bg-slate-300',   done: true,  label: 'Equipamento',                detail: 'Categoria sem envio de equipamento' },
+  };
+  const ev = map[ts];
+  if (!ev) return null;
+  return ev;
+}
 
-  function resetProgressBar() {
-    const bar = document.getElementById('progress-bar');
-    bar.classList.remove('progress-bar');
-    void bar.offsetWidth;
-    bar.classList.add('progress-bar');
-  }
+function buildTermoCard(c) {
+  const ts = c.Termo_Status;
+  const cfgMap = {
+    'Termo OK':          { bg: 'bg-emerald-50 border-emerald-200', icon: '✅', title: 'Termo OK', sub: 'O termo de responsabilidade foi enviado e concluído com sucesso.', iconCls: 'text-emerald-600' },
+    'Pendente':          { bg: 'bg-amber-50 border-amber-200',     icon: '⏳', title: 'Envio Pendente', sub: 'A tarefa de envio do termo existe no GLPI mas ainda não foi concluída.', iconCls: 'text-amber-600' },
+    'Sem tarefa':        { bg: 'bg-red-50 border-red-200',         icon: '⚠️', title: 'Sem Tarefa', sub: 'Nenhuma tarefa de termo encontrada. Pode ser necessário criar manualmente.', iconCls: 'text-red-600' },
+    'Erro ao verificar': { bg: 'bg-rose-50 border-rose-200',       icon: '❌', title: 'Erro ao Verificar', sub: 'Ocorreu um erro ao consultar as tarefas deste ticket no GLPI.', iconCls: 'text-rose-600' },
+    'Sem equipamento':   { bg: 'bg-slate-50 border-slate-200',     icon: '💼', title: 'Sem Equipamento', sub: 'Esta categoria não requer envio de equipamento.', iconCls: 'text-slate-500' },
+  };
+  const cfg = cfgMap[ts] || cfgMap['Sem equipamento'];
+  return `
+    <div class="${cfg.bg} rounded-xl border p-4 flex items-start gap-3">
+      <span class="text-2xl mt-0.5">${cfg.icon}</span>
+      <div>
+        <p class="text-sm font-bold text-slate-800">${escHtml(cfg.title)}</p>
+        <p class="text-xs text-slate-500 mt-1">${escHtml(cfg.sub)}</p>
+      </div>
+    </div>`;
+}
 
-  function startCountdown() {
-    clearInterval(countdownTimer);
-    secondsLeft = 10;
-    resetProgressBar();
-    setSyncLabel(`Próxima atualização em ${secondsLeft}s`);
-    countdownTimer = setInterval(() => {
-      secondsLeft--;
-      if (secondsLeft <= 0) {
-        clearInterval(countdownTimer);
-        fetchContratacoes();
-      } else {
-        setSyncLabel(`Próxima atualização em ${secondsLeft}s`);
-      }
-    }, 1000);
-  }
+function exportarChamadoAtual() {
+  if (!currentTicket) return;
+  // Export filtered to just this ticket ID via the termo param is not ideal;
+  // simplest: export all and open the main export. Instead build a tiny CSV inline.
+  const cols = ['ID_do_Chamado','Titulo','Status','Tempo_Solucao','Data_Abertura','Requerente','Termo_Status'];
+  const headers = ['ID','Título','Status','Tempo p/ Solução','Data de Abertura','Requerente','Status do Termo'];
+  const row = cols.map(k => `"${String(currentTicket[k] || '').replace(/"/g,'""')}"`).join(',');
+  const csv = headers.join(',') + '\r\n' + row;
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `chamado_${currentTicket.ID_do_Chamado}.csv`; a.click();
+  URL.revokeObjectURL(url);
+}
 
-  function setSyncLabel(text) { document.getElementById('sync-label').textContent = text; }
+// ═══════════════════════════════════════════════════════
+// Export dropdown
+// ═══════════════════════════════════════════════════════
+function toggleExportMenu() {
+  document.getElementById('export-menu').classList.toggle('hidden');
+}
+document.addEventListener('click', e => {
+  const w = document.getElementById('export-wrapper');
+  if (!w.contains(e.target)) document.getElementById('export-menu').classList.add('hidden');
+});
 
-  function setSyncStatus(state) {
-    const classes = { ok: 'bg-emerald-400', loading: 'bg-amber-400 animate-pulse', error: 'bg-red-400', idle: 'bg-slate-500' };
-    document.getElementById('sync-dot').className =
-      `w-2 h-2 rounded-full transition-colors duration-300 ${classes[state] || classes.idle}`;
-  }
+function exportar(formato) {
+  document.getElementById('export-menu').classList.add('hidden');
+  const termoParam = currentTermoFilter ? `&termo=${encodeURIComponent(currentTermoFilter)}` : '';
+  window.location.href = `/api/contratacoes/export?formato=${formato}${termoParam}`;
+}
 
-  // ═══════════════════════════════════════════════════════
-  // Fetch e render principal
-  // ═══════════════════════════════════════════════════════
-  async function fetchContratacoes() {
-    setSyncStatus('loading');
-    setSyncLabel('Atualizando...');
-    document.getElementById('refresh-icon').classList.add('animate-spin');
+// ═══════════════════════════════════════════════════════
+// Countdown e barra de progresso
+// ═══════════════════════════════════════════════════════
+let countdownTimer = null;
+let secondsLeft = 10;
 
-    try {
-      const resp = await fetch('/api/contratacoes');
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
+function resetProgressBar() {
+  const bar = document.getElementById('progress-bar');
+  bar.classList.remove('progress-bar');
+  void bar.offsetWidth;
+  bar.classList.add('progress-bar');
+}
 
-      lastData = data;
-      atualizarHeader(data);
-      renderTermoControls(data.chamados || []);
-      renderTabela(data);
-      setSyncStatus('ok');
-    } catch (err) {
-      console.error('[fetch]', err);
-      setSyncStatus('error');
-      setSyncLabel('Erro ao conectar');
-      document.getElementById('ultima-atualizacao').textContent = `Erro: ${err.message}`;
-    } finally {
-      document.getElementById('refresh-icon').classList.remove('animate-spin');
-      startCountdown();
-    }
-  }
-
-  function atualizarHeader(data) {
-    document.getElementById('total-count').textContent = data.total ?? 0;
-    if (data.ultima_atualizacao) {
-      const d = new Date(data.ultima_atualizacao);
-      document.getElementById('ultima-atualizacao').textContent =
-        `Snapshot do GLPI: ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
+function startCountdown() {
+  clearInterval(countdownTimer);
+  secondsLeft = 10;
+  resetProgressBar();
+  setSyncLabel(`Próxima atualização em ${secondsLeft}s`);
+  countdownTimer = setInterval(() => {
+    secondsLeft--;
+    if (secondsLeft <= 0) {
+      clearInterval(countdownTimer);
+      fetchContratacoes();
     } else {
-      document.getElementById('ultima-atualizacao').textContent = 'Aguardando primeiro ciclo do GLPI Sync...';
+      setSyncLabel(`Próxima atualização em ${secondsLeft}s`);
     }
+  }, 1000);
+}
+
+function setSyncLabel(text) { document.getElementById('sync-label').textContent = text; }
+
+function setSyncStatus(state) {
+  const classes = { ok: 'bg-emerald-400', loading: 'bg-amber-400 animate-pulse', error: 'bg-red-400', idle: 'bg-slate-500' };
+  document.getElementById('sync-dot').className =
+    `w-2 h-2 rounded-full transition-colors duration-300 ${classes[state] || classes.idle}`;
+}
+
+// ═══════════════════════════════════════════════════════
+// Fetch e render principal
+// ═══════════════════════════════════════════════════════
+async function fetchContratacoes() {
+  setSyncStatus('loading');
+  setSyncLabel('Atualizando...');
+  document.getElementById('refresh-icon').classList.add('animate-spin');
+
+  try {
+    const resp = await fetch('/api/contratacoes');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    lastData = data;
+    atualizarHeader(data);
+    renderTermoControls(data.chamados || []);
+    renderKPIs();
+    aplicarFiltros();
+    setSyncStatus('ok');
+  } catch (err) {
+    console.error('[fetch]', err);
+    setSyncStatus('error');
+    setSyncLabel('Erro ao conectar');
+    document.getElementById('ultima-atualizacao').textContent = `Erro: ${err.message}`;
+  } finally {
+    document.getElementById('refresh-icon').classList.remove('animate-spin');
+    startCountdown();
+  }
+}
+
+function atualizarHeader(data) {
+  document.getElementById('total-count').textContent = data.total ?? 0;
+  if (data.ultima_atualizacao) {
+    const d = new Date(data.ultima_atualizacao);
+    document.getElementById('ultima-atualizacao').textContent =
+      `Snapshot do GLPI: ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
+  } else {
+    document.getElementById('ultima-atualizacao').textContent = 'Aguardando primeiro ciclo do GLPI Sync...';
+  }
+}
+
+function renderTabela(data) {
+  // kept for backward compat; delegates to aplicarFiltros
+  aplicarFiltros();
+}
+
+function renderTabelaFiltrada(chamados) {
+  const tbody = document.getElementById('tabela-body');
+
+  if (chamados.length === 0) {
+    const hasAnyFilter = currentTermoFilter ||
+      document.getElementById('search-input').value ||
+      document.getElementById('filter-status').value ||
+      document.getElementById('filter-data-de').value ||
+      document.getElementById('filter-data-ate').value;
+
+    const msg = hasAnyFilter ? 'Nenhum chamado encontrado com os filtros aplicados' : 'Nenhum chamado ativo no momento';
+    const sub = hasAnyFilter ? 'Ajuste os filtros acima para ampliar a busca.' : 'O GLPI Sync está rodando e atualizará automaticamente.';
+    tbody.innerHTML = `
+      <tr><td colspan="7" class="text-center py-16">
+        <div class="flex flex-col items-center gap-3 text-slate-400">
+          <svg class="w-10 h-10 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+          </svg>
+          <p class="text-sm font-medium">${msg}</p>
+          <p class="text-xs text-slate-300">${sub}</p>
+        </div>
+      </td></tr>`;
+    return;
   }
 
-  function renderTabela(data) {
-    const all = data.chamados || [];
+  tbody.innerHTML = chamados.map((c, i) => `
+    <tr class="row-enter border-b border-slate-100 hover:bg-indigo-50/40 transition-colors duration-100 cursor-pointer"
+        style="animation-delay:${i * 12}ms"
+        onclick="openSlideover(${escHtml(JSON.stringify(c))})">
+      <td class="px-5 py-3.5 font-mono text-xs text-slate-400 whitespace-nowrap">#${c.ID_do_Chamado}</td>
+      <td class="px-5 py-3.5 text-slate-800 font-medium max-w-xs">
+        <span class="line-clamp-2" title="${escHtml(c.Titulo)}">${escHtml(c.Titulo)}</span>
+      </td>
+      <td class="px-5 py-3.5 whitespace-nowrap">${badge(c.Status, STATUS_CLASSES)}</td>
+      <td class="px-5 py-3.5 text-slate-600 text-xs whitespace-nowrap">${escHtml(c.Tempo_Solucao) || '<span class="text-slate-300">—</span>'}</td>
+      <td class="px-5 py-3.5 text-slate-600 text-xs whitespace-nowrap">${escHtml(c.Data_Abertura) || '<span class="text-slate-300">—</span>'}</td>
+      <td class="px-5 py-3.5 text-slate-700 max-w-[160px]">
+        <span class="truncate block" title="${escHtml(c.Requerente)}">${escHtml(c.Requerente) || '<span class="text-slate-300">—</span>'}</span>
+      </td>
+      <td class="px-5 py-3.5 whitespace-nowrap">${badge(c.Termo_Status, TERMO_CLASSES)}</td>
+    </tr>
+  `).join('');
+}
 
-    // Aplica filtro de termo se houver um ativo
-    const chamados = currentTermoFilter
-      ? all.filter(c => c.Termo_Status === currentTermoFilter)
-      : all;
-
-    // Atualiza indicador de filtro ativo na barra da tabela
-    const indicator = document.getElementById('filter-indicator');
-    if (currentTermoFilter) {
-      indicator.classList.remove('hidden');
-      indicator.classList.add('inline-flex');
-      indicator.textContent = `Filtrando: ${currentTermoFilter} (${chamados.length})`;
-    } else {
-      indicator.classList.add('hidden');
-      indicator.classList.remove('inline-flex');
-    }
-
-    const tbody = document.getElementById('tabela-body');
-
-    if (chamados.length === 0) {
-      const msg = currentTermoFilter
-        ? `Nenhum chamado com termo "${currentTermoFilter}"`
-        : 'Nenhum chamado ativo no momento';
-      const sub = currentTermoFilter
-        ? 'Clique em "Limpar filtro" para ver todos os chamados.'
-        : 'O GLPI Sync está rodando e atualizará automaticamente.';
-
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="7" class="text-center py-16">
-            <div class="flex flex-col items-center gap-3 text-slate-400">
-              <svg class="w-10 h-10 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-              </svg>
-              <p class="text-sm font-medium">${msg}</p>
-              <p class="text-xs text-slate-300">${sub}</p>
-            </div>
-          </td>
-        </tr>`;
-      return;
-    }
-
-    tbody.innerHTML = chamados.map((c, i) => `
-      <tr class="row-enter border-b border-slate-100 hover:bg-indigo-50/40 transition-colors duration-100"
-          style="animation-delay:${i * 12}ms">
-        <td class="px-5 py-3.5 font-mono text-xs text-slate-400 whitespace-nowrap">#${c.ID_do_Chamado}</td>
-        <td class="px-5 py-3.5 text-slate-800 font-medium max-w-xs">
-          <span class="line-clamp-2" title="${escHtml(c.Titulo)}">${escHtml(c.Titulo)}</span>
-        </td>
-        <td class="px-5 py-3.5 whitespace-nowrap">${badge(c.Status, STATUS_CLASSES)}</td>
-        <td class="px-5 py-3.5 text-slate-600 text-xs whitespace-nowrap">${escHtml(c.Tempo_Solucao) || '<span class="text-slate-300">—</span>'}</td>
-        <td class="px-5 py-3.5 text-slate-600 text-xs whitespace-nowrap">${escHtml(c.Data_Abertura) || '<span class="text-slate-300">—</span>'}</td>
-        <td class="px-5 py-3.5 text-slate-700 max-w-[160px]">
-          <span class="truncate block" title="${escHtml(c.Requerente)}">${escHtml(c.Requerente) || '<span class="text-slate-300">—</span>'}</span>
-        </td>
-        <td class="px-5 py-3.5 whitespace-nowrap">${badge(c.Termo_Status, TERMO_CLASSES)}</td>
-      </tr>
-    `).join('');
-  }
-
-  function forcarAtualizacao() {
-    clearInterval(countdownTimer);
-    fetchContratacoes();
-  }
-
-  // ═══════════════════════════════════════════════════════
-  // Inicialização
-  // ═══════════════════════════════════════════════════════
+function forcarAtualizacao() {
+  clearInterval(countdownTimer);
   fetchContratacoes();
+}
+
+// ═══════════════════════════════════════════════════════
+// Inicialização
+// ═══════════════════════════════════════════════════════
+fetchHistorico();
+fetchContratacoes();
 </script>
 </html>
