@@ -55,6 +55,7 @@ _bootstrap()
 # ============================================================================
 # Imports
 # ============================================================================
+import html as _html_mod
 import json
 import logging
 import os
@@ -106,8 +107,18 @@ STATUS_MAP: dict[int, str] = {
 
 STATUSES_ATIVOS = frozenset({1, 2, 3, 4})
 
-_TEXTO_TAREFA_TERMO   = "Enviar termo de responsabilidade"
+# Substring de busca — intencional mente curto para resistir a variações de
+# maiúsculas, pontuação ou prefixos que o GLPI possa incluir no texto da tarefa.
+_TEXTO_TAREFA_TERMO   = "termo de responsabilidade"
 _GLPI_TASK_STATE_DONE = 2
+
+
+def _limpar_html(texto: str) -> str:
+    """Remove tags HTML, decodifica entidades e normaliza espaços."""
+    texto = _html_mod.unescape(texto)           # &nbsp; &amp; &lt; etc → caracteres reais
+    texto = re.sub(r"<[^>]+>", " ", texto)      # remove tags restantes
+    texto = re.sub(r"\s+", " ", texto).strip()  # colapsa espaços/quebras de linha
+    return texto
 
 # ============================================================================
 # Configuração
@@ -353,22 +364,64 @@ class ClienteGLPI:
             return "Termo OK"
         try:
             resp = self._get(f"{self.base_url}/Ticket/{ticket_id}/TicketTask")
-            tarefas: list[dict] = resp if isinstance(resp, list) else []
-            for tarefa in tarefas:
-                content_texto = re.sub(r"<[^>]+>", " ", tarefa.get("content", "") or "")
-                if _TEXTO_TAREFA_TERMO.lower() in content_texto.lower():
+
+            # GLPI retorna dict de erro (ex.: {"ERROR": "ERROR_ITEM_NOT_FOUND"})
+            # quando o ticket não tem tarefas — não é uma lista.
+            if not isinstance(resp, list):
+                logger.debug(
+                    "Ticket #%d: resposta de TicketTask não é lista: %r", ticket_id, resp
+                )
+                return "Sem tarefa"
+
+            tarefas: list[dict] = resp
+            logger.debug("Ticket #%d: %d tarefa(s) retornada(s) pelo GLPI.", ticket_id, len(tarefas))
+
+            for i, tarefa in enumerate(tarefas):
+                raw_content = tarefa.get("content", "") or ""
+                raw_name    = tarefa.get("name", "")    or ""
+
+                # Log do conteúdo bruto para diagnóstico — visível com DEBUG
+                logger.debug(
+                    "Ticket #%d | tarefa[%d] name=%r  content(raw)=%.300r",
+                    ticket_id, i, raw_name, raw_content,
+                )
+
+                # Limpa HTML de ambos os campos e concatena para busca
+                texto_limpo = _limpar_html(raw_content + " " + raw_name)
+
+                logger.debug(
+                    "Ticket #%d | tarefa[%d] texto_limpo=%.300r",
+                    ticket_id, i, texto_limpo,
+                )
+
+                if _TEXTO_TAREFA_TERMO.lower() in texto_limpo.lower():
                     try:
                         state = int(tarefa.get("state", 0) or 0)
                     except (ValueError, TypeError):
                         state = 0
+
+                    logger.info(
+                        "Ticket #%d: tarefa de termo encontrada (state=%d) → %s",
+                        ticket_id, state,
+                        "Termo OK" if state >= _GLPI_TASK_STATE_DONE else "Pendente",
+                    )
+
                     if state >= _GLPI_TASK_STATE_DONE:
                         self._termos_concluidos.add(ticket_id)
-                        logger.debug("Ticket #%d: termo concluído.", ticket_id)
                         return "Termo OK"
                     return "Pendente"
-            # Tarefa não encontrada — NÃO cria. Apenas informa.
-            logger.debug("Ticket #%d: tarefa de termo não encontrada.", ticket_id)
+
+            # Nenhuma tarefa bateu — loga nomes para facilitar diagnóstico
+            nomes = [
+                _limpar_html(t.get("name", "") or t.get("content", "") or "")[:60]
+                for t in tarefas
+            ]
+            logger.info(
+                "Ticket #%d: tarefa de termo NÃO encontrada entre %d tarefa(s). Nomes: %s",
+                ticket_id, len(tarefas), nomes or "(nenhuma)",
+            )
             return "Sem tarefa"
+
         except Exception as exc:
             logger.error("Ticket #%d: erro ao verificar termo: %s", ticket_id, exc)
             return "Erro ao verificar"
