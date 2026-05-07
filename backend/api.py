@@ -143,16 +143,16 @@ def _export_xlsx(chamados: list[dict], ultima_atualizacao: str | None) -> Stream
     )
 
     TERMO_FILLS = {
-        "Termo enviado":      PatternFill("solid", fgColor="D1FAE5"),
-        "Pendente de envio":  PatternFill("solid", fgColor="FEF3C7"),
-        "Erro ao criar tarefa": PatternFill("solid", fgColor="FFE4E6"),
-        "Sem equipamento":    PatternFill("solid", fgColor="F1F5F9"),
+        "Termo OK":          PatternFill("solid", fgColor="D1FAE5"),
+        "Pendente":          PatternFill("solid", fgColor="FEF3C7"),
+        "Erro ao verificar": PatternFill("solid", fgColor="FFE4E6"),
+        "Sem tarefa":        PatternFill("solid", fgColor="FFE4E6"),
     }
     TERMO_FONTS = {
-        "Termo enviado":      Font(color="065F46", size=10, bold=True),
-        "Pendente de envio":  Font(color="92400E", size=10, bold=True),
-        "Erro ao criar tarefa": Font(color="9F1239", size=10, bold=True),
-        "Sem equipamento":    Font(color="475569", size=10),
+        "Termo OK":          Font(color="065F46", size=10, bold=True),
+        "Pendente":          Font(color="92400E", size=10, bold=True),
+        "Erro ao verificar": Font(color="9F1239", size=10, bold=True),
+        "Sem tarefa":        Font(color="9F1239", size=10, bold=True),
     }
     ROW_FILL_A = PatternFill("solid", fgColor="F8FAFC")
     ROW_FILL_B = PatternFill("solid", fgColor="FFFFFF")
