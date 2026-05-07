@@ -74,6 +74,7 @@ from dotenv import load_dotenv
 # automations/contratacoes/glpi_sync.py → parents[2] = raiz do repo
 _REPO_ROOT    = Path(__file__).resolve().parents[2]
 DATABASE_PATH = _REPO_ROOT / "database" / "contratacoes.json"
+HISTORICO_PATH = _REPO_ROOT / "database" / "historico.json"
 
 load_dotenv(_REPO_ROOT / ".env")
 
@@ -483,6 +484,44 @@ class SincronizadorDB:
         tmp.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, self.db_path)
         logger.info("Database atualizada: %d chamado(s) em '%s'.", len(linhas), self.db_path)
+
+        self._atualizar_historico(linhas)
+
+    def _atualizar_historico(self, linhas: list[dict]) -> None:
+        """Appends today's KPI snapshot to historico.json, keeping last 60 days."""
+        hoje = datetime.now().strftime("%Y-%m-%d")
+        contagens: dict[str, int] = {}
+        for l in linhas:
+            ts = l.get("Termo_Status", "")
+            contagens[ts] = contagens.get(ts, 0) + 1
+
+        entrada = {
+            "data":            hoje,
+            "total":           len(linhas),
+            "termo_ok":        contagens.get("Termo OK", 0),
+            "pendente":        contagens.get("Pendente", 0),
+            "sem_tarefa":      contagens.get("Sem tarefa", 0),
+            "erro_verificar":  contagens.get("Erro ao verificar", 0),
+            "sem_equipamento": contagens.get("Sem equipamento", 0),
+        }
+
+        hist_path = HISTORICO_PATH
+        hist: list[dict] = []
+        if hist_path.exists():
+            try:
+                hist = json.loads(hist_path.read_text(encoding="utf-8"))
+            except Exception:
+                hist = []
+
+        # replace today's entry if already exists, else append
+        hist = [h for h in hist if h.get("data") != hoje]
+        hist.append(entrada)
+        hist = hist[-60:]  # keep last 60 days
+
+        tmp = hist_path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(hist, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, hist_path)
+        logger.info("Histórico atualizado: %d dia(s) registrado(s).", len(hist))
 
 
 # ============================================================================
