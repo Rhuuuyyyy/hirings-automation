@@ -179,7 +179,7 @@ _GLPI_TASK_STATE_DONE = 2  # valor numérico que o GLPI usa para "tarefa conclu�
 # Padrão para extração de "Data de início: DD/MM/YYYY" do HTML do chamado.
 # Compilado uma vez no módulo para reutilização em todos os tickets.
 _PADRAO_DATA_INICIO = re.compile(
-    r"Data\s+de\s+in[íi]cio\s*:?\s*(?:<[^>]+>|&nbsp;|\s)*(\d{2}[-/]\d{2}[-/]\d{4})",
+    r"(?:Data\s+(?:de\s+)?)?\bin[íi]cio\b\s*:?\s*(?:<[^>]+>|&nbsp;|\s)*(\d{2}[-/]\d{2}[-/]\d{4})",
     re.IGNORECASE,
 )
 
