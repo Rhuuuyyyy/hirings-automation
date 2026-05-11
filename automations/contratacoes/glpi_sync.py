@@ -707,20 +707,23 @@ class ClienteGLPI:
             1. GET /Assistance/Ticket/{id} — conteúdo completo do ticket
                (o endpoint de lista pode truncar o campo content)
             2. GET /Assistance/Ticket/{id}/Timeline/ITILFollowup — comentários
-
-        Chamado apenas quando sla_ttr é None E o content em memória não bateu.
         """
         try:
-            # 1. Ticket completo (conteúdo pode ser mais longo que o retornado na lista)
             dados = self._get(f"{self.base_url}/Assistance/Ticket/{ticket_id}")
-            result = _extrair_data_inicio(dados.get("content", "") or "")
-            if result:
-                return result
-        except Exception:
-            pass
+            for campo in ("content", "description"):
+                result = _extrair_data_inicio(dados.get(campo, "") or "")
+                if result:
+                    logger.debug("Ticket #%d: data de início encontrada no campo '%s': %s", ticket_id, campo, result)
+                    return result
+            logger.debug(
+                "Ticket #%d: data de início não encontrada no ticket completo. "
+                "content[:200]=%r",
+                ticket_id, (dados.get("content") or "")[:200],
+            )
+        except Exception as exc:
+            logger.warning("Ticket #%d: erro ao buscar ticket completo: %s", ticket_id, exc)
 
         try:
-            # 2. Comentários/seguimentos (ITILFollowup)
             followups = self._get(
                 f"{self.base_url}/Assistance/Ticket/{ticket_id}/Timeline/ITILFollowup"
             )
@@ -731,9 +734,10 @@ class ClienteGLPI:
                         result = _extrair_data_inicio(item_data.get(campo, "") or "")
                         if result:
                             return result
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Ticket #%d: erro ao buscar followups: %s", ticket_id, exc)
 
+        logger.warning("Ticket #%d: data de início não encontrada em nenhuma fonte.", ticket_id)
         return ""
 
     def verificar_tarefa_termo(self, ticket_id: int) -> str:
@@ -900,20 +904,21 @@ def _formatar_datetime(valor: Any) -> str:
 
     Formato de entrada v2.3: "2023-09-18T08:10:42-03:00" (ISO 8601 com timezone)
     Formato de entrada legado: "2023-09-18 08:10:42" (sem timezone)
-    Formato de saída (dashboard): "DD/MM/YYYY HH:MM"
+    Formato de saída (dashboard): "DD/MM/YYYY HH:MM" ou "DD/MM/YYYY" (só data)
 
-    Tenta os dois formatos em ordem. Retorna str(valor) como fallback se ambos
-    falharem, para não exibir campo vazio quando a API mudar o formato novamente.
+    Retorna "" em todos os casos de falha para que o chamador possa tentar
+    outros fallbacks (ex: _extrair_data_inicio no corpo do chamado).
     """
     if not valor:
         return ""
     s = str(valor).strip()
-    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S"):
+    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
         try:
-            return datetime.strptime(s, fmt).strftime("%d/%m/%Y %H:%M")
+            dt = datetime.strptime(s, fmt)
+            return dt.strftime("%d/%m/%Y %H:%M") if fmt not in ("%Y-%m-%d",) else dt.strftime("%d/%m/%Y")
         except ValueError:
             continue
-    return s
+    return ""
 
 
 # ============================================================================
