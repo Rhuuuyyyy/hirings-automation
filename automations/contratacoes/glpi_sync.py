@@ -579,119 +579,85 @@ class ClienteGLPI:
 
     def buscar_chamados_ativos(self) -> list[dict[str, Any]]:
         """
-        Busca todos os chamados ativos das categorias configuradas e retorna
-        uma lista deduplicada com os dados brutos da API do GLPI.
+        Busca todos os chamados ativos das categorias configuradas via
+        GET /Assistance/Ticket com filtro RSQL e paginação start/limit.
 
-        Por que a Search API em vez de GET /Ticket:
-            GET /Ticket retorna TODOS os campos de um ticket por vez, um por
-            requisição. Para N tickets isso seria N+1 chamadas. A Search API
-            (GET /search/Ticket) permite buscar múltiplos tickets de uma vez
-            com apenas os campos necessários (forcedisplay), reduzindo
-            drasticamente o volume de dados transferidos e o número de
-            round-trips de rede.
+        Filtro RSQL:
+            itilcategories_id=={cat_id};status=in=(1,2,3,4)
+            ';' = AND em RSQL. status=in=(1,2,3,4) exclui Solucionado(5) e Fechado(6).
 
-        forcedisplay — campos solicitados explicitamente:
-            O GLPI não retorna todos os campos por padrão na Search API.
-            forcedisplay especifica quais IDs de campo incluir na resposta:
-                0 = field 2  → ID do chamado
-                1 = field 1  → Título
-                2 = field 12 → Status (numérico)
-                3 = field 17 → Tempo para solução (SLA deadline)
-                4 = field 15 → Data de criação
-                5 = field 4  → ID do requerente
+        Paginação:
+            API v2.3 usa start+limit (não range). HTTP 206 é a resposta normal
+            para resultados paginados. O total vem no header Content-Range: "s-e/total".
 
-        criteria — filtro por categoria:
-            field=7 é o ID do campo "Categoria" na Search API do GLPI.
-            searchtype=equals filtra exatamente por aquele ID de categoria.
-            Cada categoria é buscada em iteração separada para evitar queries
-            complexas com OR que o GLPI trata de forma inconsistente.
+        Deduplicação:
+            dict[int, ticket_id] garante que cada chamado apareça uma vez
+            mesmo que apareça em múltiplas categorias.
 
-        Paginação com range:
-            A Search API do GLPI retorna no máximo 200 itens por chamada por
-            padrão (configurável na instância). O parâmetro range=offset-(offset+199)
-            controla a janela de resultados. O loop itera até que
-            offset + len(items) >= totalcount (todos os registros foram lidos)
-            ou a página retorne vazia.
-
-        Deduplicação via dict[int, dict]:
-            Um ticket pode aparecer em múltiplas categorias se o GLPI tiver
-            categorias hierárquicas. Usar o ticket_id como chave de dicionário
-            garante que cada chamado apareça apenas uma vez no resultado final,
-            com o dado mais recente sobrescrevendo duplicatas.
-
-        Filtro de status ativo em Python (não na query):
-            Filtrar por categoria e por status na mesma query GLPI com
-            criteria[0] e criteria[1] requer lógica AND/OR que varia por
-            versão do GLPI. Mais seguro e simples é buscar por categoria
-            e filtrar status em Python com frozenset (O(1) lookup).
-
-        _cat_id injetado no item:
-            O dado da categoria não vem na resposta da Search API (apenas
-            os forcedisplay vêm). Como _chamado_para_dict() precisa saber
-            a categoria para decidir se verifica o Termo, injetamos o
-            cat_id manualmente em cada item antes de armazená-lo.
-
-        Tratamento de erros por página:
-            Falhas de rede ou JSON inválido em uma página fazem o loop
-            `break` apenas para aquela categoria — não abortam as demais.
-            Isso garante que uma categoria problemática não impede a
-            sincronização das outras.
+        _cat_id injetado:
+            Adicionado a cada item para que _chamado_para_dict() saiba se deve
+            verificar o Termo de Responsabilidade.
         """
-        PAGE_SIZE = 200
+        PAGE_SIZE = 100
         todos: dict[int, dict] = {}
 
         for cat_id in self.categoria_ids:
-            offset = 0
+            start = 0
             while True:
-                partes = [
-                    "criteria[0][field]=7",
-                    "criteria[0][searchtype]=equals",
-                    f"criteria[0][value]={cat_id}",
-                    "forcedisplay[0]=2",
-                    "forcedisplay[1]=1",
-                    "forcedisplay[2]=12",
-                    "forcedisplay[3]=17",
-                    "forcedisplay[4]=15",
-                    "forcedisplay[5]=4",
-                    f"range={offset}-{offset + PAGE_SIZE - 1}",
-                ]
-                url = f"{self.base_url}/search/Ticket?{'&'.join(partes)}"
-                logger.info("Buscando categoria %s (offset=%d)", cat_id, offset)
+                params = {
+                    "filter": f"itilcategories_id=={cat_id};status=in=(1,2,3,4)",
+                    "start":  start,
+                    "limit":  PAGE_SIZE,
+                }
+                url = f"{self.base_url}/Assistance/Ticket"
+                logger.info("Buscando categoria %s (start=%d)", cat_id, start)
                 try:
-                    response = self._session.get(url, timeout=HTTP_TIMEOUT)
+                    response = self._session.get(url, params=params, timeout=HTTP_TIMEOUT)
                     if response.status_code == 401:
                         self._renovar_sessao()
-                        response = self._session.get(url, timeout=HTTP_TIMEOUT)
+                        response = self._session.get(url, params=params, timeout=HTTP_TIMEOUT)
                     logger.info("HTTP %s | %d bytes", response.status_code, len(response.content))
+
+                    # 206 Partial Content é a resposta normal para resultados paginados
                     if not response.ok:
                         logger.error("Erro (cat %s): %.300s", cat_id, response.text)
                         break
                     if not response.text.strip():
                         logger.info("Categoria %s: sem chamados.", cat_id)
                         break
-                    dados = response.json()
-                    items: list[dict] = dados.get("data", [])
-                    totalcount: int = dados.get("totalcount", 0)
-                    ativos_pagina = 0
-                    for item in items:
-                        tid = item.get("2") or item.get("id")
-                        try:
-                            status_id = int(item.get("12") or item.get("status") or 0)
-                        except (ValueError, TypeError):
-                            status_id = 0
-                        if tid is not None and status_id in STATUSES_ATIVOS:
-                            item["_cat_id"] = int(cat_id)
-                            todos[int(tid)] = item
-                            ativos_pagina += 1
-                    logger.info(
-                        "Categoria %s: %d/%d recebidos | %d ativos.",
-                        cat_id, offset + len(items), totalcount, ativos_pagina,
-                    )
-                    if not items or offset + len(items) >= totalcount:
+
+                    items: list[dict] = response.json()
+                    if not isinstance(items, list):
+                        logger.error("Resposta inesperada (cat %s): %r", cat_id, items)
                         break
-                    offset += PAGE_SIZE
+
+                    # Total vem em Content-Range: "0-99/11489"
+                    content_range = response.headers.get("Content-Range", "")
+                    total = 0
+                    if "/" in content_range:
+                        try:
+                            total = int(content_range.split("/")[-1])
+                        except ValueError:
+                            pass
+
+                    for item in items:
+                        tid = item.get("id")
+                        if tid is None:
+                            continue
+                        item["_cat_id"] = int(cat_id)
+                        todos[int(tid)] = item
+
+                    logger.info(
+                        "Categoria %s: %d/%s recebidos.",
+                        cat_id, start + len(items), total or "?",
+                    )
+
+                    if not items or (total > 0 and start + len(items) >= total):
+                        break
+                    start += PAGE_SIZE
+
                 except requests.exceptions.RequestException as exc:
-                    logger.error("Falha de rede (cat %s, offset %d): %s", cat_id, offset, exc)
+                    logger.error("Falha de rede (cat %s, start %d): %s", cat_id, start, exc)
                     break
                 except ValueError as exc:
                     logger.error("JSON inválido (cat %s): %s", cat_id, exc)
@@ -745,7 +711,7 @@ class ClienteGLPI:
             re.IGNORECASE,
         )
         try:
-            dados = self._get(f"{self.base_url}/Ticket/{ticket_id}")
+            dados = self._get(f"{self.base_url}/Assistance/Ticket/{ticket_id}")
             match = _PADRAO.search(dados.get("content", "") or "")
             if match:
                 return match.group(1).replace("-", "/")
@@ -805,10 +771,9 @@ class ClienteGLPI:
         if ticket_id in self._termos_concluidos:
             return "Termo OK"
         try:
-            resp = self._get(f"{self.base_url}/Ticket/{ticket_id}/TicketTask")
+            resp = self._get(f"{self.base_url}/Assistance/Ticket/{ticket_id}/Timeline/Task")
 
-            # GLPI retorna dict de erro (ex.: {"ERROR": "ERROR_ITEM_NOT_FOUND"})
-            # quando o ticket não tem tarefas — não é uma lista.
+            # API retorna dict de erro ou {} quando não há tarefas — não é lista.
             if not isinstance(resp, list):
                 logger.debug(
                     "Ticket #%d: resposta de TicketTask não é lista: %r", ticket_id, resp
@@ -901,11 +866,11 @@ class ClienteGLPI:
         if user_id in self._cache_usuarios:
             return self._cache_usuarios[user_id]
         try:
-            dados = self._get(f"{self.base_url}/User/{user_id}")
+            dados = self._get(f"{self.base_url}/Administration/User/{user_id}")
             firstname = dados.get("firstname", "")
             realname  = dados.get("realname", "")
             nome = f"{firstname} {realname}".strip() or dados.get("name", str(user_id))
-        except requests.exceptions.RequestException:
+        except Exception:
             nome = str(user_id)
         self._cache_usuarios[user_id] = nome
         return nome
@@ -920,28 +885,22 @@ def _formatar_datetime(valor: Any) -> str:
     Converte uma string de datetime no formato do GLPI para o formato
     brasileiro exibido no dashboard.
 
-    Formato de entrada (GLPI):  "YYYY-MM-DD HH:MM:SS"  (ISO 8601 sem timezone)
+    Formato de entrada v2.3: "2023-09-18T08:10:42-03:00" (ISO 8601 com timezone)
+    Formato de entrada legado: "2023-09-18 08:10:42" (sem timezone)
     Formato de saída (dashboard): "DD/MM/YYYY HH:MM"
 
-    Por que datetime.strptime em vez de split/replace:
-        strptime valida a string contra o formato esperado. Se o GLPI retornar
-        um formato inesperado, ValueError é capturado e a string original é
-        retornada como fallback — evitando quebra silenciosa com dado errado.
-
-    Truncamento dos segundos (:MM:SS → :MM):
-        Segundos não têm valor operacional para o dashboard — a precisão de
-        minutos é suficiente e economiza espaço na célula da tabela.
-
-    Retorno de str(valor) como fallback:
-        Se a conversão falhar, melhor exibir o valor bruto do GLPI do que
-        uma string vazia ou um erro. O operador vê algo em vez de nada.
+    Tenta os dois formatos em ordem. Retorna str(valor) como fallback se ambos
+    falharem, para não exibir campo vazio quando a API mudar o formato novamente.
     """
     if not valor:
         return ""
-    try:
-        return datetime.strptime(str(valor), "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y %H:%M")
-    except ValueError:
-        return str(valor)
+    s = str(valor).strip()
+    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(s, fmt).strftime("%d/%m/%Y %H:%M")
+        except ValueError:
+            continue
+    return s
 
 
 # ============================================================================
@@ -989,78 +948,63 @@ class SincronizadorDB:
 
     def _chamado_para_dict(self, chamado: dict) -> dict | None:
         """
-        Transforma um item bruto da Search API do GLPI para o schema limpo
-        que o dashboard consome.
+        Transforma um ticket bruto da API v2.3 para o schema do dashboard.
 
-        Retorna None para itens inválidos (sem ID), que são filtrados em
-        sincronizar() antes de persistir.
-
-        Chaves numéricas vs. chaves textuais:
-            A Search API retorna os campos com o ID numérico como chave
-            (ex: chamado["2"] = ID, chamado["12"] = status). Isso é um
-            detalhe de implementação do GLPI. As chaves textuais alternativas
-            (chamado["id"], chamado["status"]) existem como fallback para
-            casos onde o ticket veio de outro endpoint com schema diferente.
-            O padrão `chamado.get("2") or chamado.get("id")` cobre ambos.
-
-        Conversão segura para int:
-            Campos numéricos do GLPI às vezes chegam como string ("12") ou
-            como None. O bloco try/except (ValueError, TypeError) converte
-            com segurança e usa 0 como fallback — um status_id 0 não existe
-            no STATUS_MAP e resulta em "Status 0" no dashboard, sinalizando
-            o dado inválido sem travar o ciclo.
-
-        Resolução do nome do requerente:
-            O campo 4 (requester) geralmente é um ID numérico. O try/except
-            ao redor de int(req_raw) cobre o caso onde o GLPI já retorna o
-            nome como texto (acontece com expand_dropdowns=1 ou em certas
-            versões). Se req_raw não for convertível para int, usa-se o valor
-            bruto como nome direto.
-
-        Fallback de SLA (tempo_solucao):
-            Tenta o campo 17 primeiro. Se vazio, chama
-            buscar_data_inicio_do_conteudo() que faz regex no corpo HTML
-            do ticket. Se ambos falharem, tempo_solucao fica "" e o dashboard
-            exibe "—".
-
-        Lógica de Termo:
-            Apenas chamados da categoria específica (cat_id_com_ativo) passam
-            pela verificação de tarefa de termo. Chamados de outras categorias
-            recebem "Sem tarefa" diretamente, sem chamar a API. Isso evita
-            chamadas desnecessárias para tickets que nunca terão essa tarefa.
+        Schema v2.3:
+            id           — int
+            name         — str (título)
+            status       — {"id": N, "name": "..."} (objeto, não int raw)
+            category     — {"id": N, "name": "..."} (objeto)
+            date_creation — ISO 8601 com timezone
+            sla_ttr      — ISO 8601 com timezone ou None
+            team         — lista de {role, name, firstname, realname}
+            content      — HTML do corpo do chamado
+            _cat_id      — injetado por buscar_chamados_ativos()
         """
-        id_raw = chamado.get("2") or chamado.get("id")
-        if id_raw is None:
+        ticket_id = chamado.get("id")
+        if ticket_id is None:
             return None
         try:
-            ticket_id = int(id_raw)
+            ticket_id = int(ticket_id)
         except (ValueError, TypeError):
             return None
 
-        try:
-            status_id = int(chamado.get("12") or chamado.get("status") or 0)
-        except (ValueError, TypeError):
-            status_id = 0
-
-        requerente = ""
-        req_raw = (
-            chamado.get("4")
-            or chamado.get("_users_id_requester")
-            or chamado.get("users_id_requester")
-        )
-        if req_raw:
+        # status é {"id": N, "name": "..."} em v2.3
+        status_obj = chamado.get("status") or {}
+        if isinstance(status_obj, dict):
+            status_id = status_obj.get("id", 0)
+        else:
             try:
-                uid = int(req_raw)
-                if uid > 0:
-                    requerente = self.glpi.buscar_nome_usuario(uid)
+                status_id = int(status_obj)
             except (ValueError, TypeError):
-                requerente = str(req_raw)
+                status_id = 0
 
-        tempo_solucao = _formatar_datetime(chamado.get("17") or chamado.get("time_to_resolve"))
+        # Requerente vem no array team (role == "requester") — sem lookup extra
+        requerente = ""
+        for member in (chamado.get("team") or []):
+            if isinstance(member, dict) and member.get("role") == "requester":
+                firstname = (member.get("firstname") or "").strip()
+                realname  = (member.get("realname")  or "").strip()
+                requerente = f"{firstname} {realname}".strip() or (member.get("name") or "")
+                break
+
+        # SLA deadline: campo sla_ttr (ISO 8601 ou None)
+        tempo_solucao = _formatar_datetime(chamado.get("sla_ttr"))
         if not tempo_solucao:
             tempo_solucao = self.glpi.buscar_data_inicio_do_conteudo(ticket_id)
 
-        cat_id = chamado.get("_cat_id") or chamado.get("itilcategories_id")
+        # cat_id injetado por buscar_chamados_ativos; fallback para campo category
+        cat_id = chamado.get("_cat_id")
+        if cat_id is None:
+            cat_obj = chamado.get("category") or {}
+            if isinstance(cat_obj, dict):
+                cat_id = cat_obj.get("id")
+            else:
+                try:
+                    cat_id = int(cat_obj)
+                except (ValueError, TypeError):
+                    cat_id = None
+
         if self.glpi.cats_com_ativo and cat_id in self.glpi.cats_com_ativo:
             termo_status = self.glpi.verificar_tarefa_termo(ticket_id)
         else:
@@ -1068,12 +1012,10 @@ class SincronizadorDB:
 
         return {
             "ID_do_Chamado": ticket_id,
-            "Titulo":        chamado.get("1") or chamado.get("name") or "",
+            "Titulo":        chamado.get("name") or "",
             "Status":        STATUS_MAP.get(status_id, f"Status {status_id}"),
             "Tempo_Solucao": tempo_solucao,
-            "Data_Abertura": _formatar_datetime(
-                chamado.get("15") or chamado.get("date_creation")
-            ),
+            "Data_Abertura": _formatar_datetime(chamado.get("date_creation")),
             "Requerente":    requerente,
             "Termo_Status":  termo_status,
         }
