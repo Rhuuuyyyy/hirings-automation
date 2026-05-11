@@ -456,6 +456,7 @@ class ClienteGLPI:
             "client_secret": self.client_secret,
             "username":      self.username,
             "password":      self.password,
+            "scope":         "api",  # obrigatório para acessar endpoints REST da API v2.3
         }
         # Headers temporários apenas para o request de token (sem Bearer ainda)
         auth_headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -513,11 +514,11 @@ class ClienteGLPI:
 
         Padrão de retry com auto-healing:
             A lógica é intencionalmente simples: tenta uma vez, verifica se
-            é falha de autenticação (401/403), renova a sessão e tenta mais
-            uma vez. Não há backoff exponencial nem loop de retry — se falhar
-            duas vezes, a exceção sobe para quem chamou. Isso evita que uma
-            falha permanente (token inválido, GLPI fora do ar) prenda o worker
-            em um loop infinito de retentativas.
+            o token expirou (401), renova e tenta mais uma vez. Não há backoff
+            exponencial nem loop de retry — se falhar duas vezes, a exceção sobe
+            para quem chamou. 403 NÃO dispara renovação: significa falta de
+            permissão/scope, não token expirado — renovar o token não ajudaria
+            e causaria um loop de re-autenticação inútil.
 
         Resposta vazia:
             O GLPI às vezes retorna HTTP 200 com body vazio para endpoints
@@ -532,7 +533,7 @@ class ClienteGLPI:
             com contexto da URL e do status code.
         """
         response = self._session.get(url_completa, timeout=HTTP_TIMEOUT)
-        if response.status_code in (401, 403):
+        if response.status_code == 401:  # token expirado → renova; 403 = sem permissão, não renova
             self._renovar_sessao()
             response = self._session.get(url_completa, timeout=HTTP_TIMEOUT)
         if not response.ok:
@@ -563,7 +564,7 @@ class ClienteGLPI:
         """
         body = {"input": payload}
         response = self._session.post(url_completa, json=body, timeout=HTTP_TIMEOUT)
-        if response.status_code in (401, 403):
+        if response.status_code == 401:  # token expirado → renova; 403 = sem permissão, não renova
             self._renovar_sessao()
             response = self._session.post(url_completa, json=body, timeout=HTTP_TIMEOUT)
         if not response.ok:
@@ -658,7 +659,7 @@ class ClienteGLPI:
                 logger.info("Buscando categoria %s (offset=%d)", cat_id, offset)
                 try:
                     response = self._session.get(url, timeout=HTTP_TIMEOUT)
-                    if response.status_code in (401, 403):
+                    if response.status_code == 401:
                         self._renovar_sessao()
                         response = self._session.get(url, timeout=HTTP_TIMEOUT)
                     logger.info("HTTP %s | %d bytes", response.status_code, len(response.content))
