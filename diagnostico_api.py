@@ -1,5 +1,5 @@
 """
-diagnostico_api.py — Script de diagnóstico da API Verdanadesk v2.3.
+diagnostico_api.py — Script de diagnóstico da API Verdanadesk.
 Execute: python diagnostico_api.py
 """
 import os, json, sys
@@ -17,14 +17,7 @@ PASSWORD      = os.getenv("OAUTH_PASSWORD", "")
 
 import re
 TOKEN_URL = re.sub(r"/v[\d.]+$", "/token", API_URL)
-BASE       = re.sub(r"/api\.php.*$", "", API_URL)   # https://dexian.verdanadesk.com
-API_ROOT   = re.sub(r"/v[\d.]+$", "", API_URL)      # https://dexian.verdanadesk.com/api.php
-
-print(f"API_URL  : {API_URL}")
-print(f"BASE     : {BASE}")
-print(f"API_ROOT : {API_ROOT}")
-print(f"TOKEN_URL: {TOKEN_URL}")
-print()
+API_ROOT  = re.sub(r"/v[\d.]+$", "", API_URL)   # https://.../api.php
 
 # ── 1. Autenticar ─────────────────────────────────────────────────────────────
 print("=== 1. OAuth2 ===")
@@ -36,70 +29,66 @@ r = requests.post(TOKEN_URL, data={
     "password":      PASSWORD,
     "scope":         "api",
 }, timeout=15)
-print(f"Status: {r.status_code}")
 if not r.ok:
     print("ERRO:", r.text); sys.exit(1)
 token = r.json().get("access_token")
-print(f"Token: {token[:20]}...")
+print(f"Token OK: {token[:20]}...")
 print()
 
 H = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
-def test(label, url, params=None, method="GET"):
-    print(f"--- {label}")
+def get(label, url, params=None, extra_headers=None):
+    hdrs = {**H, **(extra_headers or {})}
+    resp = requests.get(url, headers=hdrs, params=params, timeout=10)
     try:
-        if method == "GET":
-            resp = requests.get(url, headers=H, params=params, timeout=10)
-        else:
-            resp = requests.options(url, headers=H, timeout=10)
-        body = resp.text[:600]
-        try:
-            body = json.dumps(resp.json(), ensure_ascii=False)[:600]
-        except Exception:
-            pass
-        print(f"    {resp.status_code} | {url}" + (f"?{params}" if params else ""))
-        print(f"    {body}")
-    except Exception as e:
-        print(f"    ERRO: {e}")
+        body = json.dumps(resp.json(), ensure_ascii=False, indent=2)
+    except Exception:
+        body = resp.text
+    print(f"--- {label}")
+    print(f"    {resp.status_code} | {url}")
+    if params:
+        print(f"    params: {params}")
+    print(body[:3000])
     print()
 
-# ── 2. Explorar base URL sem versão ───────────────────────────────────────────
-print("=== 2. Variações de base URL ===")
-test("api.php raiz",             f"{API_ROOT}/")
-test("api.php sem versão /Ticket", f"{API_ROOT}/Ticket")
-test("api.php /v2/Ticket",       f"{API_ROOT}/v2/Ticket")
-test("api.php /v2.3/Ticket",     f"{API_ROOT}/v2.3/Ticket")
+# ── 2. Raiz completa ──────────────────────────────────────────────────────────
+print("=== 2. Raiz completa da API (ver todas as versões) ===")
+get("GET /api.php/", f"{API_ROOT}/")
 
-# ── 3. Variações de nome de recurso ───────────────────────────────────────────
-print("=== 3. Variações de nome de recurso ===")
-test("ticket (minúsculo)",       f"{API_URL}/ticket")
-test("tickets (plural)",         f"{API_URL}/tickets")
-test("helpdesk",                 f"{API_URL}/helpdesk")
-test("Ticket",                   f"{API_URL}/Ticket")
-test("ITILCategory",             f"{API_URL}/ITILCategory")
+# ── 3. Testar v1 com Bearer token ─────────────────────────────────────────────
+print("=== 3. API v1 com Bearer token ===")
+get("GET /api.php/v1/",          f"{API_ROOT}/v1/")
+get("GET /api.php/v1/Ticket",    f"{API_ROOT}/v1/Ticket")
+get("GET /api.php/v1/search/Ticket (5 primeiros)",
+    f"{API_ROOT}/v1/search/Ticket",
+    {"criteria[0][field]": "2", "criteria[0][searchtype]": "contains",
+     "criteria[0][value]": "", "range": "0-4"})
 
-# ── 4. Sem o bearer — ver se muda o erro ─────────────────────────────────────
-print("=== 4. Sem Authorization header ===")
-r2 = requests.get(f"{API_URL}/Ticket", timeout=10)
-print(f"    {r2.status_code} | {r2.text[:300]}")
+# ── 4. API v1 sem Bearer — testar se exige initSession ───────────────────────
+print("=== 4. v1 sem auth ===")
+r2 = requests.get(f"{API_ROOT}/v1/Ticket", timeout=10)
+print(f"    {r2.status_code} | {r2.text[:400]}")
 print()
 
-# ── 5. OPTIONS para ver métodos permitidos ────────────────────────────────────
-print("=== 5. OPTIONS /Ticket ===")
-r3 = requests.options(f"{API_URL}/Ticket", headers=H, timeout=10)
-print(f"    Status: {r3.status_code}")
-print(f"    Allow: {r3.headers.get('Allow', '(vazio)')}")
-print(f"    Body: {r3.text[:300]}")
+# ── 5. Versão disponível da API v2.x ─────────────────────────────────────────
+print("=== 5. Testar versões alternativas ===")
+for ver in ["v2.0", "v2.1", "v2.2", "v2.3", "v2.4"]:
+    resp = requests.get(f"{API_ROOT}/{ver}/Ticket", headers=H, timeout=8)
+    print(f"    /api.php/{ver}/Ticket → {resp.status_code}")
 print()
 
-# ── 6. Tentar endpoint de usuário atual (me / User) ──────────────────────────
-print("=== 6. Endpoints de usuário (para confirmar auth funciona) ===")
-test("User (minha conta)",  f"{API_URL}/User/me")
-test("User sem ID",         f"{API_URL}/User")
-test("getMyProfiles",       f"{API_URL}/getMyProfiles")
-test("getActiveProfile",    f"{API_URL}/getActiveProfile")
+# ── 6. GraphQL ────────────────────────────────────────────────────────────────
+print("=== 6. GraphQL ===")
+gql_url = f"{API_URL}/graphql"
+payload = {"query": "{ Ticket(limit: 3) { id name status } }"}
+rg = requests.post(gql_url, headers={**H, "Content-Type": "application/json"},
+                   json=payload, timeout=10)
+print(f"    POST {gql_url} → {rg.status_code}")
+print(f"    {rg.text[:600]}")
+print()
 
-# ── 7. Token info ─────────────────────────────────────────────────────────────
-print("=== 7. Tentar obter info do token ===")
-test("token info", f"{BASE}/api.php/token/info")
-test("introspect",  f"{BASE}/api.php/token/introspect")
+# ── 7. v1 com initSession (para confirmar se v1 precisa de outro auth) ────────
+print("=== 7. v1 initSession com Bearer ===")
+get("initSession via Bearer",
+    f"{API_ROOT}/v1/initSession",
+    extra_headers={"Authorization": f"Bearer {token}"})
