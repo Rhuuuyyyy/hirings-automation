@@ -1,5 +1,5 @@
 """
-diagnostico_api.py — fase 4: descobrir paths reais do v2.3.
+diagnostico_api.py — fase 5: entender /{req} e /session da v2.3.
 Execute: python diagnostico_api.py
 """
 import os, json, sys
@@ -14,11 +14,11 @@ CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET", "")
 USERNAME      = os.getenv("OAUTH_USERNAME", "")
 PASSWORD      = os.getenv("OAUTH_PASSWORD", "")
 
-API_ROOT = "https://dexian.verdanadesk.com/api.php"
-V23      = f"{API_ROOT}/v2.3"
+API_ROOT  = "https://dexian.verdanadesk.com/api.php"
+V23       = f"{API_ROOT}/v2.3"
+V1        = f"{API_ROOT}/v1"
 TOKEN_URL = f"{API_ROOT}/token"
 
-# ── Bearer token ──────────────────────────────────────────────────────────────
 r = requests.post(TOKEN_URL, data={
     "grant_type": "password", "client_id": CLIENT_ID,
     "client_secret": CLIENT_SECRET, "username": USERNAME,
@@ -30,75 +30,62 @@ H = {"Authorization": f"Bearer {bearer}", "Accept": "application/json"}
 
 def show(label, resp):
     try:
-        body = json.dumps(resp.json(), ensure_ascii=False, indent=2)[:2000]
+        body = json.dumps(resp.json(), ensure_ascii=False, indent=2)
     except Exception:
-        body = resp.text[:2000]
+        body = resp.text
     print(f"[{resp.status_code}] {label}")
-    print(body); print()
+    print(body[:3000]); print()
 
-def get(url, params=None, extra=None):
-    return requests.get(url, headers={**H, **(extra or {})}, params=params, timeout=10)
-
-# ── 1. Buscar spec OpenAPI com auth ───────────────────────────────────────────
-print("=== 1. OpenAPI spec com Bearer ===")
-for path in ["/doc.json", "/swagger.json", "/openapi.json", "/api.json", "/doc/openapi.json"]:
-    r2 = get(f"{V23}{path}")
-    paths_count = "N/A"
-    if r2.ok:
-        try:
-            data = r2.json()
-            paths_count = str(list(data.get("paths", {}).keys())[:10])
-        except Exception:
-            pass
-    print(f"  {r2.status_code} | {V23}{path} | paths={paths_count}")
+# ── 1. doc.json completo — ver definição de /{req} e /session ─────────────────
+print("=== 1. doc.json completo (paths e definição de /{req}) ===")
+r2 = requests.get(f"{V23}/doc.json", headers=H, timeout=15)
+if r2.ok:
+    spec = r2.json()
+    paths = spec.get("paths", {})
+    for path, methods in paths.items():
+        print(f"\n  PATH: {path}")
+        for method, details in methods.items():
+            print(f"    {method.upper()}: {details.get('summary','')}")
+            params = details.get("parameters", [])
+            for p in params:
+                print(f"      param: {p.get('name')} ({p.get('in')}) required={p.get('required')}")
+            resp_codes = list(details.get("responses", {}).keys())
+            print(f"      responses: {resp_codes}")
+else:
+    print(f"  {r2.status_code}: {r2.text[:200]}")
 print()
 
-# ── 2. Muitas variações de nome de recurso ────────────────────────────────────
-print("=== 2. Variações de recurso em v2.3 ===")
-resources = [
-    "Ticket", "ticket", "tickets", "Tickets",
-    "Helpdesk", "helpdesk", "HelpDesk",
-    "Issue", "issues", "Request", "requests",
-    "TicketRequest", "ItilTicket", "ITIL",
-    "User", "user", "users",
-    "Profile", "Entity", "Category",
-    "ITILCategory", "Status", "status",
-    "me", "whoami", "self",
-]
-for res in resources:
-    r3 = get(f"{V23}/{res}")
-    if r3.status_code != 404:
-        print(f"  *** {r3.status_code} | /{res} *** ← diferente de 404!")
-    else:
-        print(f"  {r3.status_code} | /{res}")
-print()
+# ── 2. GET /v2.3/session ───────────────────────────────────────────────────────
+print("=== 2. GET /v2.3/session ===")
+show("GET /session", requests.get(f"{V23}/session", headers=H, timeout=10))
 
-# ── 3. Accept: application/vnd.api+json (JSON:API spec) ───────────────────────
-print("=== 3. JSON:API content-type ===")
-jsonapi_h = {"Authorization": f"Bearer {bearer}",
-             "Accept": "application/vnd.api+json",
-             "Content-Type": "application/vnd.api+json"}
-for path in ["/Ticket", "/tickets", "/helpdesk"]:
-    r4 = requests.get(f"{V23}{path}", headers=jsonapi_h, timeout=10)
-    print(f"  {r4.status_code} | {path} (JSON:API) | {r4.text[:200]}")
-print()
+# ── 3. POST /v2.3/session ─────────────────────────────────────────────────────
+print("=== 3. POST /v2.3/session ===")
+show("POST /session", requests.post(f"{V23}/session", headers=H, timeout=10))
 
-# ── 4. v2.3 doc HTML — tentar extrair URL do spec ────────────────────────────
-print("=== 4. v2.3/doc HTML (procurando URL do spec) ===")
-r5 = requests.get(f"{V23}/doc", headers=H, timeout=10)
-print(f"  {r5.status_code} | content-type: {r5.headers.get('content-type', '?')}")
-text = r5.text
-# Procurar URLs de spec no HTML
-import re
-urls = re.findall(r'["\']([^"\']*(?:swagger|openapi|api\.json|spec)[^"\']*)["\']', text, re.I)
-print(f"  URLs encontradas no HTML: {urls[:10]}")
-# Procurar src de JS também
-srcs = re.findall(r'src=["\']([^"\']+)["\']', text)
-print(f"  Scripts: {srcs[:5]}")
-print()
+# ── 4. /{req} com valor real — será que é um proxy para v1? ──────────────────
+print("=== 4. /{req} como proxy v1 — testar paths que funcionariam no v1 ===")
+for path in ["Ticket", "search/Ticket", "getMyProfiles", "User/2"]:
+    show(f"GET /{path}", requests.get(f"{V23}/{path}", headers=H, timeout=10))
 
-# ── 5. Tentar sem versão path mas com query param ─────────────────────────────
-print("=== 5. Outros padrões ===")
-show("GET /v2.3/Ticket?range=0-0", get(f"{V23}/Ticket", {"range": "0-0"}))
-show("GET /v2.3 (raiz da versão)", get(f"{V23}"))
-show("GET /v2.3/ (com barra)", get(f"{V23}/"))
+# ── 5. Status scope separado ──────────────────────────────────────────────────
+print("=== 5. scope=status ===")
+rt = requests.post(TOKEN_URL, data={
+    "grant_type": "password", "client_id": CLIENT_ID,
+    "client_secret": CLIENT_SECRET, "username": USERNAME,
+    "password": PASSWORD, "scope": "status",
+}, timeout=15)
+if rt.ok:
+    tok2 = rt.json().get("access_token", "")
+    H2 = {"Authorization": f"Bearer {tok2}"}
+    show("GET /status (scope=status)", requests.get(f"{V23}/status", headers=H2, timeout=10))
+else:
+    print(f"  scope=status falhou: {rt.status_code}")
+
+# ── 6. v1 com Bearer como user_token (não como App-Token) ────────────────────
+print("=== 6. v1 initSession: App-Token=client_id + user_token=Bearer ===")
+show("initSession user_token=bearer",
+     requests.get(f"{V1}/initSession",
+                  headers={"App-Token": CLIENT_ID,
+                           "Authorization": f"user_token {bearer}"},
+                  timeout=10))
