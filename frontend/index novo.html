@@ -116,8 +116,24 @@
     }
     .progress-bar {
       transform-origin: left center;
-      animation: shrink 10s linear forwards;
+      animation: shrink var(--sync-dur, 10s) linear forwards;
     }
+
+    /* Interval select */
+    .interval-select {
+      background: transparent;
+      border: none;
+      outline: none;
+      font-family: 'Geist Mono', ui-monospace, monospace;
+      font-size: 10.5px;
+      color: var(--text-3);
+      cursor: pointer;
+      padding: 0;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    .interval-select:hover { color: var(--text-2); }
+    .interval-select option { background: var(--surface); color: var(--text); }
 
     /* Spinner */
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -287,6 +303,205 @@
     /* Selection */
     ::selection { background: var(--accent-bg); color: var(--accent-2); }
 
+    /* Usuários: tabs */
+    .usr-tab {
+      color: var(--text-3);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      margin-bottom: -1px;
+      border-bottom: 1.5px solid transparent;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .usr-tab:hover:not(.disabled):not(.active) { color: var(--text); }
+    .usr-tab.active {
+      color: var(--text);
+      border-bottom-color: var(--accent);
+    }
+    .usr-tab.disabled {
+      color: var(--text-4);
+      cursor: not-allowed;
+    }
+
+    /* Usuários: open link button */
+    .open-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px 4px 9px;
+      border-radius: 6px;
+      border: 1px solid var(--line-2);
+      background: var(--surface);
+      color: var(--text-2);
+      font-size: 11.5px;
+      font-family: 'Geist Mono', ui-monospace, monospace;
+      letter-spacing: -0.005em;
+      cursor: pointer;
+      transition: all 120ms;
+      white-space: nowrap;
+    }
+    .open-btn:hover {
+      color: var(--accent-2);
+      border-color: var(--accent-line);
+      background: var(--accent-bg);
+    }
+    .open-btn svg { width: 11px; height: 11px; }
+
+    /* Usuários: identity cell — avatar + name + meta */
+    .ident { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .avatar {
+      width: 26px; height: 26px;
+      flex-shrink: 0;
+      border-radius: 999px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      background: var(--surface-2);
+      border: 1px solid var(--line-2);
+      color: var(--text-2);
+      font-family: 'Geist Mono', ui-monospace, monospace;
+    }
+    .ident-meta { min-width: 0; }
+    .ident-name {
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ident-sub {
+      font-size: 11px;
+      color: var(--text-3);
+      font-family: 'Geist Mono', ui-monospace, monospace;
+      margin-top: 1px;
+    }
+    .ident-sub .dot { color: var(--text-4); margin: 0 5px; }
+
+    /* Inactive badge */
+    .badge-inactive {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 1px 6px 1px 5px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-family: 'Geist Mono', ui-monospace, monospace;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: rgba(248,113,113,0.10);
+      color: var(--err);
+      border: 1px solid rgba(248,113,113,0.25);
+    }
+    .badge-inactive::before {
+      content: ''; width: 4px; height: 4px; border-radius: 999px;
+      background: var(--err);
+    }
+
+    /* Machine cell — icon + name + tag */
+    .mach { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .mach-icn {
+      width: 26px; height: 26px;
+      flex-shrink: 0;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--surface-2);
+      border: 1px solid var(--line-2);
+      color: var(--text-3);
+    }
+    .mach-icn svg { width: 13px; height: 13px; }
+    .mach-name {
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text);
+      font-family: 'Geist Mono', ui-monospace, monospace;
+      letter-spacing: -0.005em;
+    }
+    .mach-sub {
+      font-size: 11px;
+      color: var(--text-3);
+      margin-top: 1px;
+    }
+
+    /* CC chip */
+    .cc-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 8px 3px 7px;
+      border-radius: 5px;
+      font-size: 11.5px;
+      background: var(--surface-2);
+      border: 1px solid var(--line-2);
+      white-space: nowrap;
+    }
+    .cc-chip .cc-code {
+      font-size: 11px;
+      color: var(--text);
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+    .cc-chip .cc-name { color: var(--text-3); font-size: 11px; }
+    .cc-chip.cc-user::before,
+    .cc-chip.cc-mach::before {
+      content: ''; width: 5px; height: 5px; border-radius: 999px; flex-shrink: 0;
+    }
+    .cc-chip.cc-user::before { background: var(--info); }
+    .cc-chip.cc-mach::before { background: var(--warn); }
+
+    /* Owner stack */
+    .owner-stack { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .owner-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 2px 8px 2px 2px;
+      border-radius: 999px;
+      background: var(--surface-2);
+      border: 1px solid var(--line-2);
+      color: var(--text-2);
+      font-size: 11.5px;
+      text-decoration: none;
+      transition: all 120ms;
+      max-width: 200px;
+    }
+    .owner-pill:hover {
+      color: var(--accent-2);
+      border-color: var(--accent-line);
+      background: var(--accent-bg);
+    }
+    .owner-avatar {
+      width: 18px; height: 18px;
+      flex-shrink: 0;
+      border-radius: 999px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px;
+      font-weight: 600;
+      background: var(--bg-2);
+      border: 1px solid var(--line);
+      color: var(--text-2);
+      font-family: 'Geist Mono', ui-monospace, monospace;
+    }
+    .owner-pill .owner-name {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .owner-more {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: var(--surface-2);
+      border: 1px dashed var(--line-2);
+      color: var(--text-3);
+    }
+
+    /* Qty badge */
+    .qty-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 26px; padding: 2px 7px;
+      border-radius: 5px;
+      font-size: 11.5px;
+      font-weight: 600;
+      background: var(--accent-bg);
+      color: var(--accent-2);
+      border: 1px solid var(--accent-line);
+    }
+
     /* Theme toggle active button */
     .theme-btn { color: var(--text-3); background: transparent; cursor: pointer; }
     .theme-btn.active { color: var(--text); background: var(--surface-2); }
@@ -332,6 +547,17 @@
         <span class="ml-auto mono text-[10.5px]" style="color: var(--text-3);" id="sidebar-count">—</span>
       </button>
 
+      <button onclick="showPage('analise-usuarios')" id="nav-analise-usuarios"
+        class="nav-item w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] font-medium transition-colors" style="color: var(--text-2);">
+        <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/>
+          <circle cx="9" cy="7" r="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-2.2-2.2M20 16.5a3.5 3.5 0 11-7 0 3.5 3.5 0 017 0z"/>
+        </svg>
+        <span>Análise de Usuários</span>
+        <span class="ml-auto mono text-[10.5px]" style="color: var(--text-3);" id="sidebar-count-usuarios">—</span>
+      </button>
+
       <button onclick="showPage('em-breve')" id="nav-em-breve"
         class="nav-item w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] font-medium transition-colors">
         <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
@@ -350,7 +576,16 @@
           </div>
           <span id="sync-label" class="text-[11.5px]" style="color: var(--text-2);">Aguardando…</span>
         </div>
-        <span id="sync-count" class="mono text-[10.5px]" style="color: var(--text-4);">10s</span>
+        <div class="flex items-center gap-1" style="color: var(--text-4);">
+          <span id="sync-count" class="mono text-[10.5px]"></span>
+          <select id="interval-select" class="interval-select" onchange="onIntervalChange(this.value)" title="Intervalo de atualização">
+            <option value="10">10s</option>
+            <option value="30">30s</option>
+            <option value="60">1 min</option>
+            <option value="120">2 min</option>
+            <option value="300">5 min</option>
+          </select>
+        </div>
       </div>
       <div class="h-[2px] rounded-full overflow-hidden" style="background: var(--line);">
         <div id="progress-bar" class="h-full progress-bar" style="background: var(--accent); width: 100%;"></div>
@@ -552,7 +787,10 @@
                     <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Requerente</span>
                   </th>
                   <th class="text-left px-4 py-2.5 font-medium whitespace-nowrap" style="color: var(--text-3);">
-                    <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Termo</span>
+                    <button class="sort-btn" data-sort="Termo_Status">
+                      <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Termo</span>
+                      <svg class="sort-icon" fill="currentColor" viewBox="0 0 8 12"><path d="M4 0L7 4H1zM4 12L1 8h6z"/></svg>
+                    </button>
                   </th>
                   <th class="w-[1%] px-2"></th>
                 </tr>
@@ -594,6 +832,204 @@
               <span class="flex items-center gap-1.5">
                 <span class="kbd">R</span> sync
               </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── PÁGINA: Análise de Usuários ─── -->
+    <div id="page-analise-usuarios" class="hidden flex-1 flex flex-col overflow-hidden">
+
+      <!-- Top bar -->
+      <header class="flex-shrink-0 px-6 pt-5 pb-4">
+        <div class="flex items-start justify-between gap-6">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-[11px] mono uppercase tracking-[0.14em]" style="color: var(--text-3);">Módulo</span>
+              <svg class="w-2.5 h-2.5" style="color: var(--text-4);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+              </svg>
+              <span class="text-[11px] mono uppercase tracking-[0.14em]" style="color: var(--text-2);">Verdanadesk · Usuários</span>
+            </div>
+            <h1 class="text-[22px] font-semibold tracking-tight leading-tight">Análise de Usuários</h1>
+            <p class="text-[12.5px] mt-1" style="color: var(--text-3);">
+              <span class="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style="background: var(--ok);"></span>
+              <span class="align-middle">Inventário cruzado — <span id="usr-last-sync">aguardando conexão</span></span>
+            </p>
+          </div>
+
+          <!-- Stats strip -->
+          <div class="flex items-stretch gap-0 rounded-lg overflow-hidden border hairline-2" style="background: var(--surface);">
+            <div class="px-4 py-2.5 border-r hairline-2 min-w-[100px]">
+              <p class="text-[10px] mono uppercase tracking-[0.14em]" style="color: var(--text-3);">Registros</p>
+              <p class="mono text-[18px] font-semibold tracking-tight leading-tight mt-0.5" id="usr-stat-total" style="color: var(--text);">—</p>
+            </div>
+            <div class="px-4 py-2.5 border-r hairline-2 min-w-[100px]">
+              <p class="text-[10px] mono uppercase tracking-[0.14em]" style="color: var(--text-3);">Usuários únicos</p>
+              <p class="mono text-[18px] font-semibold tracking-tight leading-tight mt-0.5" id="usr-stat-unicos" style="color: var(--warn);">—</p>
+            </div>
+            <div class="px-4 py-2.5 min-w-[100px]">
+              <p class="text-[10px] mono uppercase tracking-[0.14em]" style="color: var(--text-3);">Máquinas</p>
+              <p class="mono text-[18px] font-semibold tracking-tight leading-tight mt-0.5" id="usr-stat-maquinas" style="color: var(--info);">—</p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Toolbar: search + ações (linha separada) -->
+      <div class="flex-shrink-0 px-6 pb-3">
+        <div class="flex items-center gap-1 flex-wrap">
+          <div class="search-wrap flex items-center gap-2 px-2.5 py-1.5 rounded-md border hairline-2 min-w-[280px] transition-all" style="background: var(--surface);">
+            <svg class="w-3.5 h-3.5" style="color: var(--text-3);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/>
+            </svg>
+            <input id="usr-search" type="text" placeholder="Buscar usuário, máquina ou centro de custo…"
+              class="bg-transparent outline-none text-[12.5px] flex-1 placeholder:text-[var(--text-4)]" style="color: var(--text);"/>
+          </div>
+          <div class="flex-1"></div>
+          <button class="ml-1 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border hairline-2 text-[12px] transition-colors hover:border-[var(--line-2)] hover:text-[var(--text)]" style="background: var(--surface); color: var(--text-2);" title="Atualizar análise">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            <span>Sync</span>
+          </button>
+          <button class="ml-1 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border hairline-2 text-[12px] transition-colors hover:border-[var(--line-2)] hover:text-[var(--text)]" style="background: var(--surface); color: var(--text-2);" title="Exportar">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+            </svg>
+            <span>Exportar</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabs: tipo de análise -->
+      <div class="flex-shrink-0 px-6">
+        <div class="flex items-end gap-0 border-b hairline-2 overflow-x-auto">
+          <button class="usr-tab active flex items-center gap-2 px-3.5 py-2 text-[12.5px] font-medium transition-colors relative" data-analysis="inativos-maquinas">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+              <rect x="3" y="4" width="18" height="12" rx="1.5"/>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 20h8M12 16v4"/>
+            </svg>
+            <span>Usuários inativos com máquinas atreladas</span>
+            <span class="usr-tab-count mono text-[10px] px-1.5 py-0.5 rounded" style="background: var(--chip-count-bg); color: var(--text-3);">—</span>
+          </button>
+          <button class="usr-tab flex items-center gap-2 px-3.5 py-2 text-[12.5px] font-medium transition-colors relative" data-analysis="cc-divergente">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 7h4l2-3h6l2 3h4M3 7v12a1 1 0 001 1h16a1 1 0 001-1V7M3 7l3 4m15-4l-3 4"/>
+              <circle cx="12" cy="14" r="2.5"/>
+            </svg>
+            <span>Usuário e máquina em centros de custo diferentes</span>
+            <span class="usr-tab-count mono text-[10px] px-1.5 py-0.5 rounded" style="background: var(--chip-count-bg); color: var(--text-3);">—</span>
+          </button>
+          <button class="usr-tab flex items-center gap-2 px-3.5 py-2 text-[12.5px] font-medium transition-colors relative" data-analysis="multi-responsaveis">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+              <circle cx="9" cy="7" r="4"/>
+            </svg>
+            <span>Máquinas com múltiplos responsáveis</span>
+            <span class="usr-tab-count mono text-[10px] px-1.5 py-0.5 rounded" style="background: var(--chip-count-bg); color: var(--text-3);">—</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Sub-header: descrição da análise ativa -->
+      <div class="flex-shrink-0 px-6 pt-3 pb-3">
+        <div class="flex items-center gap-2 text-[11.5px]" style="color: var(--text-3);">
+          <svg class="w-3 h-3" style="color: var(--text-4);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01"/>
+          </svg>
+          <span id="usr-desc">—</span>
+        </div>
+      </div>
+
+      <!-- Tables (uma por análise) -->
+      <div class="flex-1 overflow-hidden px-6 pb-6">
+        <div class="h-full rounded-lg border hairline-2 overflow-hidden flex flex-col" style="background: var(--surface);">
+          <div class="flex-1 overflow-auto">
+
+            <!-- ── Análise 1: Inativos com máquinas atreladas ── -->
+            <table class="usr-view w-full text-[12.5px]" data-density="dense" data-view="inativos-maquinas">
+              <thead>
+                <tr>
+                  <th class="text-left px-4 py-2.5 font-medium" style="color: var(--text-3);">
+                    <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Usuário</span>
+                  </th>
+                  <th class="text-left px-4 py-2.5 font-medium whitespace-nowrap w-[1%]" style="color: var(--text-3);">
+                    <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Link do usuário</span>
+                  </th>
+                  <th class="text-left px-4 py-2.5 font-medium" style="color: var(--text-3);">
+                    <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Máquina</span>
+                  </th>
+                  <th class="text-left px-4 py-2.5 font-medium whitespace-nowrap w-[1%]" style="color: var(--text-3);">
+                    <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Link da máquina</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody data-body="inativos-maquinas"></tbody>
+            </table>
+
+            <!-- ── Análise 2: Centro de custo divergente ── -->
+            <table class="usr-view w-full text-[12.5px] hidden" data-density="dense" data-view="cc-divergente">
+              <thead>
+                <tr>
+                  <th class="text-left px-4 py-2.5 font-medium" style="color: var(--text-3);">
+                    <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Usuário</span>
+                  </th>
+                  <th class="text-left px-4 py-2.5 font-medium whitespace-nowrap" style="color: var(--text-3);">
+                    <span class="text-[10.5px] mono uppercase tracking-[0.14em]">CC do usuário</span>
+                  </th>
+                  <th class="text-left px-4 py-2.5 font-medium whitespace-nowrap w-[1%]" style="color: var(--text-3);">
+                    <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Link do usuário</span>
+                  </th>
+                  <th class="text-left px-4 py-2.5 font-medium" style="color: var(--text-3);">
+                    <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Máquina</span>
+                  </th>
+                  <th class="text-left px-4 py-2.5 font-medium whitespace-nowrap" style="color: var(--text-3);">
+                    <span class="text-[10.5px] mono uppercase tracking-[0.14em]">CC da máquina</span>
+                  </th>
+                  <th class="text-left px-4 py-2.5 font-medium whitespace-nowrap w-[1%]" style="color: var(--text-3);">
+                    <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Link da máquina</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody data-body="cc-divergente"></tbody>
+            </table>
+
+            <!-- ── Análise 3: Máquinas com múltiplos responsáveis ── -->
+            <table class="usr-view w-full text-[12.5px] hidden" data-density="dense" data-view="multi-responsaveis">
+              <thead>
+                <tr>
+                  <th class="text-left px-4 py-2.5 font-medium" style="color: var(--text-3);">
+                    <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Máquina</span>
+                  </th>
+                  <th class="text-left px-4 py-2.5 font-medium whitespace-nowrap w-[1%]" style="color: var(--text-3);">
+                    <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Link da máquina</span>
+                  </th>
+                  <th class="text-left px-4 py-2.5 font-medium" style="color: var(--text-3);">
+                    <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Responsáveis</span>
+                  </th>
+                  <th class="text-left px-4 py-2.5 font-medium whitespace-nowrap w-[1%]" style="color: var(--text-3);">
+                    <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Qtd.</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody data-body="multi-responsaveis"></tbody>
+            </table>
+
+          </div>
+
+          <div class="flex-shrink-0 px-4 py-2 border-t hairline-2 flex items-center justify-between text-[11.5px]" style="background: var(--bg-2); color: var(--text-3);">
+            <div class="flex items-center gap-3">
+              <span><span class="mono" id="usr-footer-shown">0</span> visíveis</span>
+              <span style="color: var(--text-4);">·</span>
+              <span><span class="mono" id="usr-footer-total">0</span> total</span>
+              <span style="color: var(--text-4);">·</span>
+              <span>Última varredura: <span class="mono" id="usr-footer-time">—</span></span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="flex items-center gap-1.5"><span class="kbd">↑</span><span class="kbd">↓</span> navegar</span>
+              <span class="flex items-center gap-1.5"><span class="kbd">↵</span> abrir</span>
             </div>
           </div>
         </div>
@@ -722,7 +1158,7 @@
   // Page navigation
   // ═══════════════════════════════════════════════════════
   function showPage(page) {
-    ['contratacoes', 'em-breve'].forEach(p => {
+    ['contratacoes', 'analise-usuarios', 'em-breve'].forEach(p => {
       const el = document.getElementById(`page-${p}`);
       const nav = document.getElementById(`nav-${p}`);
       if (p === page) {
@@ -739,6 +1175,261 @@
     });
   }
   showPage('contratacoes');
+
+  // ═══════════════════════════════════════════════════════
+  // Análise de Usuários — pronto para conectar à API
+  // ═══════════════════════════════════════════════════════
+  //
+  // CONTRATOS DE DADOS:
+  //
+  //   inativos-maquinas  → [{ user, userId, userUrl, machine, machineId, machineUrl, dept?, desligado? }]
+  //   cc-divergente      → [{ user, userId, userUrl, userCC, userCCName?, machine, machineId, machineUrl, machineCC, machineCCName? }]
+  //   multi-responsaveis → [{ machine, machineId, machineUrl, owners: [{ name, userId, userUrl }] }]
+  //
+  // Para popular: window.HUB.setAnalysisData('inativos-maquinas', [...rows])
+  // ═══════════════════════════════════════════════════════
+
+  const ANALYSES = {
+    'inativos-maquinas': {
+      label: 'Usuários inativos com máquinas atreladas',
+      desc:  'Usuários marcados como <span style="color: var(--text-2);">inativos</span> no Verdanadesk que ainda possuem ao menos uma máquina atrelada ao seu cadastro.',
+      colspan: 4,
+      rows: [],
+    },
+    'cc-divergente': {
+      label: 'Usuário e máquina em centros de custo diferentes',
+      desc:  'Usuários cujo centro de custo cadastrado <span style="color: var(--text-2);">não coincide</span> com o centro de custo da máquina atrelada ao seu nome.',
+      colspan: 6,
+      rows: [],
+    },
+    'multi-responsaveis': {
+      label: 'Máquinas com múltiplos responsáveis',
+      desc:  'Máquinas que possuem <span style="color: var(--text-2);">dois ou mais usuários</span> registrados como responsáveis simultaneamente.',
+      colspan: 4,
+      rows: [],
+    },
+  };
+
+  let currentAnalysis = 'inativos-maquinas';
+
+  function initials(name) {
+    return String(name || '?').split(/\s+/).filter(Boolean).slice(0,2).map(w => w[0]).join('').toUpperCase();
+  }
+
+  function ext() {
+    return `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>`;
+  }
+  function openBtn(url) {
+    const safe = url ? escHtml(url) : '#';
+    const dis  = url ? '' : 'style="opacity:0.4; pointer-events:none;"';
+    return `<a class="open-btn" href="${safe}" target="_blank" rel="noopener" ${dis}>${ext()}<span>Abrir</span></a>`;
+  }
+  function machIcon() {
+    return `<div class="mach-icn"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path stroke-linecap="round" stroke-linejoin="round" d="M8 20h8M12 16v4"/></svg></div>`;
+  }
+  function ccChip(code, name, tone) {
+    if (!code && !name) return `<span style="color: var(--text-4);">—</span>`;
+    const t = tone || 'neutral';
+    return `<span class="cc-chip cc-${t}"><span class="cc-code mono">${escHtml(code || '—')}</span>${name ? `<span class="cc-name">${escHtml(name)}</span>` : ''}</span>`;
+  }
+
+  function emptyRow(colspan, msg, sub) {
+    return `<tr><td colspan="${colspan}" class="text-center py-16">
+      <div class="flex flex-col items-center gap-2" style="color: var(--text-3);">
+        <div class="w-9 h-9 rounded-lg flex items-center justify-center" style="background: var(--surface-2); border: 1px solid var(--line-2);">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8" style="color: var(--text-4);">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 7l16 0M4 12l16 0M4 17l10 0"/>
+          </svg>
+        </div>
+        <p class="text-[12.5px]" style="color: var(--text-2);">${escHtml(msg)}</p>
+        ${sub ? `<p class="text-[11px]" style="color: var(--text-4);">${escHtml(sub)}</p>` : ''}
+      </div>
+    </td></tr>`;
+  }
+
+  function renderInativos(rows) {
+    return rows.map((r, i) => `
+      <tr class="row-enter" style="animation-delay:${i*18}ms; border-top: 1px solid var(--line);">
+        <td class="px-4">
+          <div class="ident">
+            <div class="avatar">${initials(r.user)}</div>
+            <div class="ident-meta">
+              <div class="ident-name">${escHtml(r.user)} <span class="badge-inactive ml-1.5" style="vertical-align: middle;">Inativo</span></div>
+              <div class="ident-sub">${escHtml(r.userId || '—')}${r.dept ? `<span class="dot">·</span>${escHtml(r.dept)}` : ''}${r.desligado ? `<span class="dot">·</span>desligado ${escHtml(r.desligado)}` : ''}</div>
+            </div>
+          </div>
+        </td>
+        <td class="px-4">${openBtn(r.userUrl)}</td>
+        <td class="px-4">
+          <div class="mach">${machIcon()}
+            <div><div class="mach-name">${escHtml(r.machine || '—')}</div>
+              ${r.machineId ? `<div class="mach-sub">${escHtml(r.machineId)}</div>` : ''}
+            </div>
+          </div>
+        </td>
+        <td class="px-4">${openBtn(r.machineUrl)}</td>
+      </tr>
+    `).join('');
+  }
+
+  function renderCCDivergente(rows) {
+    return rows.map((r, i) => `
+      <tr class="row-enter" style="animation-delay:${i*18}ms; border-top: 1px solid var(--line);">
+        <td class="px-4">
+          <div class="ident">
+            <div class="avatar">${initials(r.user)}</div>
+            <div class="ident-meta">
+              <div class="ident-name">${escHtml(r.user)}</div>
+              <div class="ident-sub">${escHtml(r.userId || '—')}</div>
+            </div>
+          </div>
+        </td>
+        <td class="px-4">${ccChip(r.userCC, r.userCCName, 'user')}</td>
+        <td class="px-4">${openBtn(r.userUrl)}</td>
+        <td class="px-4">
+          <div class="mach">${machIcon()}
+            <div><div class="mach-name">${escHtml(r.machine || '—')}</div>
+              ${r.machineId ? `<div class="mach-sub">${escHtml(r.machineId)}</div>` : ''}
+            </div>
+          </div>
+        </td>
+        <td class="px-4">${ccChip(r.machineCC, r.machineCCName, 'mach')}</td>
+        <td class="px-4">${openBtn(r.machineUrl)}</td>
+      </tr>
+    `).join('');
+  }
+
+  function renderMultiResp(rows) {
+    return rows.map((r, i) => {
+      const owners = Array.isArray(r.owners) ? r.owners : [];
+      const stack = owners.slice(0, 4).map(o =>
+        `<a class="owner-pill" href="${escHtml(o.userUrl || '#')}" target="_blank" rel="noopener" title="Abrir usuário no Verdanadesk">
+          <span class="owner-avatar">${initials(o.name)}</span>
+          <span class="owner-name">${escHtml(o.name || '—')}</span>
+        </a>`
+      ).join('');
+      const more = owners.length > 4 ? `<span class="owner-more mono">+${owners.length - 4}</span>` : '';
+      return `
+      <tr class="row-enter" style="animation-delay:${i*18}ms; border-top: 1px solid var(--line);">
+        <td class="px-4">
+          <div class="mach">${machIcon()}
+            <div><div class="mach-name">${escHtml(r.machine || '—')}</div>
+              ${r.machineId ? `<div class="mach-sub">${escHtml(r.machineId)}</div>` : ''}
+            </div>
+          </div>
+        </td>
+        <td class="px-4">${openBtn(r.machineUrl)}</td>
+        <td class="px-4">
+          <div class="owner-stack">${stack}${more}</div>
+        </td>
+        <td class="px-4">
+          <span class="qty-badge mono">${owners.length}</span>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  const RENDERERS = {
+    'inativos-maquinas': renderInativos,
+    'cc-divergente':     renderCCDivergente,
+    'multi-responsaveis':renderMultiResp,
+  };
+
+  function applyUsrFilter(rows, key) {
+    const q = (document.getElementById('usr-search').value || '').toLowerCase().trim();
+    if (!q) return rows;
+    return rows.filter(r => {
+      const hay = [
+        r.user, r.userId, r.machine, r.machineId, r.userCC, r.userCCName, r.machineCC, r.machineCCName, r.dept,
+        ...(Array.isArray(r.owners) ? r.owners.map(o => `${o.name} ${o.userId||''}`) : []),
+      ].filter(Boolean).join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  function renderAnalysis(key) {
+    const def = ANALYSES[key];
+    if (!def) return;
+    // Toggle visible table
+    document.querySelectorAll('.usr-view').forEach(t => {
+      t.classList.toggle('hidden', t.dataset.view !== key);
+    });
+    // Description
+    document.getElementById('usr-desc').innerHTML = def.desc;
+    // Rows
+    const tbody = document.querySelector(`tbody[data-body="${key}"]`);
+    const filtered = applyUsrFilter(def.rows, key);
+    if (!def.rows.length) {
+      tbody.innerHTML = emptyRow(def.colspan, 'Aguardando conexão com a fonte de dados.', 'Quando o backend estiver ligado, os registros aparecem aqui.');
+    } else if (!filtered.length) {
+      tbody.innerHTML = emptyRow(def.colspan, 'Nenhum resultado para o filtro atual.', '');
+    } else {
+      tbody.innerHTML = RENDERERS[key](filtered);
+    }
+    // Footer counts
+    document.getElementById('usr-footer-shown').textContent = filtered.length;
+    document.getElementById('usr-footer-total').textContent = def.rows.length;
+  }
+
+  function refreshUsrStats() {
+    const cur = ANALYSES[currentAnalysis];
+    const rows = cur.rows;
+    document.getElementById('usr-stat-total').textContent = rows.length;
+    if (currentAnalysis === 'multi-responsaveis') {
+      // unicos = somatório de responsáveis únicos; maquinas = qtd de máquinas
+      const owners = new Set();
+      rows.forEach(r => (r.owners || []).forEach(o => owners.add(o.userId || o.name)));
+      document.getElementById('usr-stat-unicos').textContent = owners.size;
+      document.getElementById('usr-stat-maquinas').textContent = new Set(rows.map(r => r.machineId || r.machine)).size;
+    } else {
+      document.getElementById('usr-stat-unicos').textContent = new Set(rows.map(r => r.userId || r.user)).size;
+      document.getElementById('usr-stat-maquinas').textContent = new Set(rows.map(r => r.machineId || r.machine)).size;
+    }
+    // Sidebar count — soma de todos os achados
+    const total = Object.values(ANALYSES).reduce((acc, a) => acc + a.rows.length, 0);
+    const sb = document.getElementById('sidebar-count-usuarios');
+    if (sb) sb.textContent = total || '—';
+    // Tab counters
+    document.querySelectorAll('.usr-tab').forEach(tab => {
+      const key = tab.dataset.analysis;
+      if (!key) return;
+      const c = tab.querySelector('.usr-tab-count');
+      if (c) c.textContent = ANALYSES[key].rows.length || '—';
+    });
+  }
+
+  function setAnalysisData(key, rows) {
+    if (!ANALYSES[key]) return;
+    ANALYSES[key].rows = Array.isArray(rows) ? rows : [];
+    refreshUsrStats();
+    if (key === currentAnalysis) renderAnalysis(key);
+  }
+
+  // API pública
+  window.HUB = window.HUB || {};
+  window.HUB.setAnalysisData = setAnalysisData;
+  window.HUB.getAnalyses = () => ANALYSES;
+
+  // Tab switching
+  document.querySelectorAll('.usr-tab').forEach(t => {
+    t.addEventListener('click', () => {
+      if (t.classList.contains('disabled')) return;
+      const key = t.dataset.analysis;
+      if (!key) return;
+      document.querySelectorAll('.usr-tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      currentAnalysis = key;
+      refreshUsrStats();
+      renderAnalysis(key);
+    });
+  });
+
+  const usrSearch = document.getElementById('usr-search');
+  if (usrSearch) usrSearch.addEventListener('input', () => renderAnalysis(currentAnalysis));
+
+  // Estado inicial vazio
+  refreshUsrStats();
+  renderAnalysis(currentAnalysis);
 
   // ═══════════════════════════════════════════════════════
   // Status & Termo styling
@@ -760,16 +1451,16 @@
   }
 
   const TERMO_ICON = {
-    'Termo enviado': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`,
-    'Pendente de envio': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2"/></svg>`,
-    'Sem equipamento': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14"/></svg>`,
-    'Erro ao criar tarefa': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>`,
+    'Termo OK':          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`,
+    'Pendente':          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2"/></svg>`,
+    'Sem tarefa':        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14"/></svg>`,
+    'Erro ao verificar': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>`,
   };
   const TERMO_COLOR = {
-    'Termo enviado':        'var(--ok)',
-    'Pendente de envio':    'var(--warn)',
-    'Sem equipamento':      'var(--text-4)',
-    'Erro ao criar tarefa': 'var(--err)',
+    'Termo OK':          'var(--ok)',
+    'Pendente':          '#fb923c',
+    'Sem tarefa':        'var(--text-2)',
+    'Erro ao verificar': 'var(--err)',
   };
   function termoCell(text) {
     const c = TERMO_COLOR[text] || 'var(--text-4)';
@@ -781,39 +1472,52 @@
     return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  // SLA bar — extracts day count to flag rows with ≤3 days remaining
+  // SLA bar — handles DD/MM/YYYY dates by computing remaining days from today
+  function _slaLevel(text) {
+    const parsed = parseDateBR(text);
+    if (parsed) {
+      const days = Math.ceil((parsed - new Date()) / 86400000);
+      if (days < 0)  return { pct: 100, bar: 'var(--err)',  txt: 'var(--err)',    alert: 'overdue' };
+      if (days === 0)return { pct:  95, bar: 'var(--err)',  txt: 'var(--err)',    alert: 'overdue' };
+      if (days <= 3) return { pct:  75, bar: 'var(--warn)', txt: 'var(--warn)',   alert: 'soon'    };
+      if (days <= 7) return { pct:  50, bar: 'var(--info)', txt: 'var(--text)',   alert: null      };
+      return             { pct:  25, bar: 'var(--ok)',   txt: 'var(--text)',   alert: null      };
+    }
+    return null;
+  }
+
   function slaCell(text) {
     if (!text) return '<span style="color: var(--text-4);">—</span>';
     const safe = escHtml(text);
-    const t = String(text).toLowerCase();
-
-    // Try to parse day count
+    const lv = _slaLevel(text);
+    if (lv) {
+      return `<div class="flex items-center gap-2.5">
+        <div class="sla-track"><div class="sla-fill" style="width:${lv.pct}%;background:${lv.bar};"></div></div>
+        <span class="mono text-[11.5px]" style="color:${lv.txt};">${safe}</span>
+      </div>`;
+    }
+    // Legacy fallback for old text-based formats
+    const t = text.toLowerCase();
     const dayMatch = t.match(/(-?\d+)\s*dia/);
     const days = dayMatch ? parseInt(dayMatch[1], 10) : null;
     const isOverdue = t.includes('atras') || t.includes('expir') || (days !== null && days < 0);
     const isHoursOnly = !dayMatch && /\d+\s*h/.test(t);
-
-    let pct = 50, color = 'var(--text-2)', alert = false;
-    if (isOverdue)               { pct = 100; color = 'var(--err)';  alert = 'overdue'; }
-    else if (isHoursOnly)        { pct = 90;  color = 'var(--warn)'; alert = 'soon'; }
-    else if (days !== null && days <= 3) { pct = 75; color = 'var(--warn)'; alert = 'soon'; }
-    else if (days !== null && days <= 7) { pct = 50; color = 'var(--text-2)'; }
-    else if (days !== null)      { pct = 25;  color = 'var(--ok)'; }
-
-    const textColor = alert === 'overdue'
-      ? 'var(--err)'
-      : alert === 'soon'
-        ? 'var(--warn)'
-        : 'var(--text-2)';
-
+    let pct = 50, bar = 'var(--text-2)', txt = 'var(--text-2)';
+    if (isOverdue)               { pct = 100; bar = 'var(--err)';  txt = 'var(--err)';  }
+    else if (isHoursOnly)        { pct =  90; bar = 'var(--warn)'; txt = 'var(--warn)'; }
+    else if (days !== null && days <= 3) { pct = 75; bar = 'var(--warn)'; txt = 'var(--warn)'; }
+    else if (days !== null && days <= 7) { pct = 50; }
+    else if (days !== null)      { pct =  25; bar = 'var(--ok)'; }
     return `<div class="flex items-center gap-2.5">
-      <div class="sla-track"><div class="sla-fill" style="width: ${pct}%; background: ${color};"></div></div>
-      <span class="mono text-[11.5px]" style="color: ${textColor};">${safe}</span>
+      <div class="sla-track"><div class="sla-fill" style="width:${pct}%;background:${bar};"></div></div>
+      <span class="mono text-[11.5px]" style="color:${txt};">${safe}</span>
     </div>`;
   }
 
-  // Detect rows that should get the discreet row-level alert tint
+  // Row-level alert tint driven by the same date logic
   function rowAlertLevel(c) {
+    const lv = _slaLevel(c.Tempo_Solucao || '');
+    if (lv) return lv.alert;
     const t = String(c.Tempo_Solucao || '').toLowerCase();
     if (!t) return null;
     if (t.includes('atras') || t.includes('expir')) return 'overdue';
@@ -830,9 +1534,27 @@
   // ═══════════════════════════════════════════════════════
   let countdownTimer = null;
   let secondsLeft = 10;
+  let syncInterval = 10;  // seconds, configurable
+
+  const _SYNC_OPTIONS = [10, 30, 60, 120, 300];
+
+  function loadSyncInterval() {
+    try {
+      const v = parseInt(localStorage.getItem('hub-sync-interval'));
+      if (_SYNC_OPTIONS.includes(v)) syncInterval = v;
+    } catch (e) {}
+  }
+
+  function onIntervalChange(val) {
+    syncInterval = parseInt(val);
+    try { localStorage.setItem('hub-sync-interval', syncInterval); } catch (e) {}
+    clearInterval(countdownTimer);
+    fetchContratacoes();
+  }
 
   function resetProgressBar() {
     const bar = document.getElementById('progress-bar');
+    document.documentElement.style.setProperty('--sync-dur', `${syncInterval}s`);
     bar.style.animation = 'none';
     void bar.offsetWidth;
     bar.style.animation = '';
@@ -840,9 +1562,9 @@
 
   function startCountdown() {
     clearInterval(countdownTimer);
-    secondsLeft = 10;
+    secondsLeft = syncInterval;
     resetProgressBar();
-    setSyncLabel(`Próximo sync`);
+    setSyncLabel('Próximo sync');
     document.getElementById('sync-count').textContent = `${secondsLeft}s`;
     countdownTimer = setInterval(() => {
       secondsLeft--;
@@ -935,6 +1657,16 @@
     }
   }
 
+  // Parses "DD/MM/YYYY" or "DD/MM/YYYY HH:MM" into a Date for correct sorting.
+  function parseDateBR(str) {
+    if (!str) return null;
+    const m = String(str).match(/^(\d{2})\/(\d{2})\/(\d{4})(?:[T\s](\d{2}):(\d{2}))?/);
+    if (!m) return null;
+    return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0));
+  }
+
+  const _DATE_SORT_KEYS = new Set(['Tempo_Solucao', 'Data_Abertura']);
+
   function applyFilters() {
     let rows = allChamados.slice();
     if (activeStatusFilter === '__termos') {
@@ -952,6 +1684,13 @@
     }
     rows.sort((a, b) => {
       const av = a[sortKey] ?? ''; const bv = b[sortKey] ?? '';
+      if (_DATE_SORT_KEYS.has(sortKey)) {
+        const da = parseDateBR(av), db = parseDateBR(bv);
+        if (da && db) return sortDir === 'asc' ? da - db : db - da;
+        if (da) return sortDir === 'asc' ? -1 : 1;
+        if (db) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      }
       const cmp = String(av).localeCompare(String(bv), 'pt-BR', { numeric: true });
       return sortDir === 'asc' ? cmp : -cmp;
     });
@@ -979,7 +1718,7 @@
       const alertAttr = alert ? ` data-alert="${alert}"` : '';
       return `
       <tr class="row-enter row-clickable border-t hairline"${alertAttr} data-idx="${i}" style="animation-delay: ${Math.min(i, 20) * 12}ms; border-color: var(--line); cursor: pointer;">
-        <td class="px-4 align-middle whitespace-nowrap mono text-[11.5px]" style="color: var(--text-3);">#${escHtml(c.ID_do_Chamado)}</td>
+        <td class="px-4 align-middle whitespace-nowrap mono text-[11.5px]" style="color: var(--text-3);"><a href="https://dexian.verdanadesk.com/front/ticket.form.php?id=${encodeURIComponent(c.ID_do_Chamado)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color: var(--text-3); text-decoration: none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">#${escHtml(c.ID_do_Chamado)}</a></td>
         <td class="px-4 align-middle max-w-[420px]">
           <span class="truncate-2 text-[12.5px] font-medium" style="color: var(--text);" title="${escHtml(c.Titulo)}">${escHtml(c.Titulo) || '—'}</span>
         </td>
@@ -1031,7 +1770,7 @@
         <div>
           <p class="text-[13px] font-medium" style="color: var(--text);">Falha ao conectar com o GLPI Sync</p>
           <p class="text-[11.5px] mt-1 mono" style="color: var(--err);">${escHtml(msg)}</p>
-          <p class="text-[11.5px] mt-2" style="color: var(--text-3);">Próxima tentativa em <span class="mono" id="err-count">10s</span> · ou pressione <span class="kbd">R</span> para tentar agora.</p>
+          <p class="text-[11.5px] mt-2" style="color: var(--text-3);">Próxima tentativa em <span class="mono" id="err-count"></span> · ou pressione <span class="kbd">R</span> para tentar agora.</p>
         </div>
       </div>
     </td></tr>`;
@@ -1202,6 +1941,8 @@
   // ═══════════════════════════════════════════════════════
   // Init
   // ═══════════════════════════════════════════════════════
+  loadSyncInterval();
+  document.getElementById('interval-select').value = syncInterval;
   fetchContratacoes();
 </script>
 </body>
