@@ -1,5 +1,5 @@
 """
-diagnostico_api.py — fase 5: entender /{req} e /session da v2.3.
+diagnostico_api.py — fase 6: listar TODOS os paths e testar Helpdesk/Ticket.
 Execute: python diagnostico_api.py
 """
 import os, json, sys
@@ -16,7 +16,6 @@ PASSWORD      = os.getenv("OAUTH_PASSWORD", "")
 
 API_ROOT  = "https://dexian.verdanadesk.com/api.php"
 V23       = f"{API_ROOT}/v2.3"
-V1        = f"{API_ROOT}/v1"
 TOKEN_URL = f"{API_ROOT}/token"
 
 r = requests.post(TOKEN_URL, data={
@@ -25,67 +24,84 @@ r = requests.post(TOKEN_URL, data={
     "password": PASSWORD, "scope": "api",
 }, timeout=15)
 bearer = r.json().get("access_token", "")
-print(f"Bearer: {'OK' if bearer else 'FALHOU'}\n")
 H = {"Authorization": f"Bearer {bearer}", "Accept": "application/json"}
 
-def show(label, resp):
-    try:
-        body = json.dumps(resp.json(), ensure_ascii=False, indent=2)
-    except Exception:
-        body = resp.text
-    print(f"[{resp.status_code}] {label}")
-    print(body[:3000]); print()
+# ── 1. TODOS os paths do doc.json ─────────────────────────────────────────────
+print("=== 1. TODOS os paths disponíveis na v2.3 ===")
+spec = requests.get(f"{V23}/doc.json", headers=H, timeout=15).json()
+all_paths = list(spec.get("paths", {}).keys())
+print(f"Total de paths: {len(all_paths)}\n")
 
-# ── 1. doc.json completo — ver definição de /{req} e /session ─────────────────
-print("=== 1. doc.json completo (paths e definição de /{req}) ===")
-r2 = requests.get(f"{V23}/doc.json", headers=H, timeout=15)
-if r2.ok:
-    spec = r2.json()
-    paths = spec.get("paths", {})
-    for path, methods in paths.items():
-        print(f"\n  PATH: {path}")
-        for method, details in methods.items():
-            print(f"    {method.upper()}: {details.get('summary','')}")
-            params = details.get("parameters", [])
-            for p in params:
-                print(f"      param: {p.get('name')} ({p.get('in')}) required={p.get('required')}")
-            resp_codes = list(details.get("responses", {}).keys())
-            print(f"      responses: {resp_codes}")
-else:
-    print(f"  {r2.status_code}: {r2.text[:200]}")
+# Filtrar paths com palavras-chave relevantes
+keywords = ["ticket", "helpdesk", "assistance", "itil", "support", "chamado", "request", "incident"]
+print("--- Paths que contêm palavras-chave relevantes:")
+for p in all_paths:
+    if any(k in p.lower() for k in keywords):
+        print(f"  {p}")
+
+print("\n--- Todos os paths (agrupados por prefixo):")
+prefixes = {}
+for p in all_paths:
+    parts = p.strip("/").split("/")
+    prefix = parts[0] if parts else "/"
+    prefixes.setdefault(prefix, []).append(p)
+for prefix, paths in sorted(prefixes.items()):
+    print(f"\n  [{prefix}]")
+    for p in paths[:5]:  # primeiros 5 de cada grupo
+        print(f"    {p}")
+    if len(paths) > 5:
+        print(f"    ... (+{len(paths)-5} mais)")
+
 print()
 
-# ── 2. GET /v2.3/session ───────────────────────────────────────────────────────
-print("=== 2. GET /v2.3/session ===")
-show("GET /session", requests.get(f"{V23}/session", headers=H, timeout=10))
+# ── 2. Testar os paths mais prováveis para Ticket ─────────────────────────────
+print("=== 2. Testar endpoints de Ticket ===")
+candidates = [
+    "/Helpdesk/Ticket",
+    "/Helpdesk/Tickets",
+    "/Helpdesk/ticket",
+    "/Assistance/Ticket",
+    "/Assistance/ticket",
+    "/ITIL/Ticket",
+    "/itil/ticket",
+    "/Support/Ticket",
+    "/helpdesk/Ticket",
+]
+# Adicionar qualquer path do spec que contenha "ticket"
+for p in all_paths:
+    if "ticket" in p.lower() and p not in candidates:
+        candidates.append(p)
 
-# ── 3. POST /v2.3/session ─────────────────────────────────────────────────────
-print("=== 3. POST /v2.3/session ===")
-show("POST /session", requests.post(f"{V23}/session", headers=H, timeout=10))
+for path in candidates:
+    resp = requests.get(f"{V23}{path}", headers=H, timeout=8)
+    marker = "  *** FUNCIONOU! ***" if resp.ok else ""
+    try:
+        body = resp.json()
+        detail = str(body)[:120]
+    except Exception:
+        detail = resp.text[:120]
+    print(f"  {resp.status_code} | {path}{marker}")
+    if resp.ok:
+        print(f"    {detail}")
+print()
 
-# ── 4. /{req} com valor real — será que é um proxy para v1? ──────────────────
-print("=== 4. /{req} como proxy v1 — testar paths que funcionariam no v1 ===")
-for path in ["Ticket", "search/Ticket", "getMyProfiles", "User/2"]:
-    show(f"GET /{path}", requests.get(f"{V23}/{path}", headers=H, timeout=10))
+# ── 3. Testar com os headers GLPI-Profile e GLPI-Entity ───────────────────────
+print("=== 3. Testar /Helpdesk/Ticket com GLPI-Profile e GLPI-Entity ===")
+# Profile 10 = Atendimento - TI, Entity 0 = Dexian Brasil
+H_with_profile = {**H, "GLPI-Profile": "10", "GLPI-Entity": "0"}
+for path in ["/Helpdesk/Ticket", "/Ticket", "/helpdesk/ticket"]:
+    resp = requests.get(f"{V23}{path}", headers=H_with_profile, timeout=8)
+    try:
+        body = str(resp.json())[:200]
+    except Exception:
+        body = resp.text[:200]
+    print(f"  {resp.status_code} | {path} (com GLPI-Profile=10)")
+    if resp.ok:
+        print(f"    {body}")
+print()
 
-# ── 5. Status scope separado ──────────────────────────────────────────────────
-print("=== 5. scope=status ===")
-rt = requests.post(TOKEN_URL, data={
-    "grant_type": "password", "client_id": CLIENT_ID,
-    "client_secret": CLIENT_SECRET, "username": USERNAME,
-    "password": PASSWORD, "scope": "status",
-}, timeout=15)
-if rt.ok:
-    tok2 = rt.json().get("access_token", "")
-    H2 = {"Authorization": f"Bearer {tok2}"}
-    show("GET /status (scope=status)", requests.get(f"{V23}/status", headers=H2, timeout=10))
-else:
-    print(f"  scope=status falhou: {rt.status_code}")
-
-# ── 6. v1 com Bearer como user_token (não como App-Token) ────────────────────
-print("=== 6. v1 initSession: App-Token=client_id + user_token=Bearer ===")
-show("initSession user_token=bearer",
-     requests.get(f"{V1}/initSession",
-                  headers={"App-Token": CLIENT_ID,
-                           "Authorization": f"user_token {bearer}"},
-                  timeout=10))
+# ── 4. Mostrar prefixos únicos de top-level para referência ──────────────────
+print("=== 4. Top-level prefixos disponíveis na API ===")
+for prefix in sorted(prefixes.keys()):
+    count = len(prefixes[prefix])
+    print(f"  /{prefix}  ({count} endpoint{'s' if count>1 else ''})")
