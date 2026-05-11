@@ -297,15 +297,20 @@ def carregar_configuracoes() -> dict[str, Any]:
     logger.info("Categorias configuradas: %s", categoria_ids)
 
     cat_ativo_raw = os.getenv("CATEGORIA_CONTRATACAO_ID_WITH_ASSETS", "").strip()
-    cat_id_com_ativo: int | None = None
+    cats_com_ativo: set[int] = set()
     if cat_ativo_raw:
-        try:
-            cat_id_com_ativo = int(cat_ativo_raw)
-            logger.info("Categoria com ativo: %d", cat_id_com_ativo)
-        except ValueError:
-            logger.warning(
-                "CATEGORIA_CONTRATACAO_ID_WITH_ASSETS inválido ('%s'). Ignorando.", cat_ativo_raw
-            )
+        for parte in cat_ativo_raw.split(","):
+            parte = parte.strip()
+            if not parte:
+                continue
+            try:
+                cats_com_ativo.add(int(parte))
+            except ValueError:
+                logger.warning(
+                    "CATEGORIA_CONTRATACAO_ID_WITH_ASSETS: valor inválido '%s'. Ignorando.", parte
+                )
+    if cats_com_ativo:
+        logger.info("Categorias com ativo (Termo): %s", sorted(cats_com_ativo))
 
     return {
         "API_URL":             api_url,
@@ -316,7 +321,7 @@ def carregar_configuracoes() -> dict[str, Any]:
         "OAUTH_PASSWORD":      password,
         "POLLING_INTERVAL":    os.getenv("POLLING_INTERVAL", "300"),
         "CATEGORIA_IDS":       categoria_ids,
-        "CAT_ID_COM_ATIVO":    cat_id_com_ativo,
+        "CATS_COM_ATIVO":      cats_com_ativo,
     }
 
 
@@ -348,7 +353,7 @@ class ClienteGLPI:
         username: str,
         password: str,
         categoria_ids: list[str],
-        cat_id_com_ativo: int | None = None,
+        cats_com_ativo: set[int] | None = None,
     ) -> None:
         """
         Inicializa o cliente e abre imediatamente uma sessão autenticada via OAuth2.
@@ -380,7 +385,7 @@ class ClienteGLPI:
         self.username = username
         self.password = password
         self.categoria_ids = categoria_ids
-        self.cat_id_com_ativo = cat_id_com_ativo
+        self.cats_com_ativo: set[int] = cats_com_ativo or set()
         self.access_token: str | None = None
         self._session = requests.Session()
         self._cache_usuarios: dict[int, str] = {}
@@ -399,6 +404,12 @@ class ClienteGLPI:
             importante após renovação do token: o token expirado é descartado
             completamente antes de o novo ser inserido.
 
+        Por que NÃO definir Content-Type aqui:
+            Content-Type: application/json em requests GET faz servidores como
+            o Verdanadesk v2.3 tentarem parsear um corpo JSON inexistente,
+            retornando 400 "Corpo JSON inválido". O header só faz sentido em
+            POST/PUT/PATCH e é definido explicitamente em _post().
+
         Authorization: Bearer é adicionado condicionalmente:
             Durante a autenticação inicial, access_token ainda é None. Nesse
             ponto a Session não deve carregar um header Authorization — o
@@ -407,7 +418,6 @@ class ClienteGLPI:
             propagado automaticamente para todas as chamadas subsequentes.
         """
         self._session.headers.clear()
-        self._session.headers.update({"Content-Type": "application/json"})
         if self.access_token:
             self._session.headers["Authorization"] = f"Bearer {self.access_token}"
 
@@ -1050,7 +1060,7 @@ class SincronizadorDB:
             tempo_solucao = self.glpi.buscar_data_inicio_do_conteudo(ticket_id)
 
         cat_id = chamado.get("_cat_id") or chamado.get("itilcategories_id")
-        if self.glpi.cat_id_com_ativo is not None and cat_id == self.glpi.cat_id_com_ativo:
+        if self.glpi.cats_com_ativo and cat_id in self.glpi.cats_com_ativo:
             termo_status = self.glpi.verificar_tarefa_termo(ticket_id)
         else:
             termo_status = "Sem tarefa"
@@ -1246,7 +1256,7 @@ def main() -> None:
         username=config["OAUTH_USERNAME"],
         password=config["OAUTH_PASSWORD"],
         categoria_ids=config["CATEGORIA_IDS"],
-        cat_id_com_ativo=config["CAT_ID_COM_ATIVO"],
+        cats_com_ativo=config["CATS_COM_ATIVO"],
     )
     sync = SincronizadorDB(db_path=DATABASE_PATH, glpi=glpi)
 
