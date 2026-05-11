@@ -579,89 +579,107 @@ class ClienteGLPI:
 
     def buscar_chamados_ativos(self) -> list[dict[str, Any]]:
         """
-        Busca todos os chamados ativos das categorias configuradas via
-        GET /Assistance/Ticket com filtro RSQL e paginação start/limit.
+        Busca todos os chamados ativos das categorias configuradas.
 
-        Filtro RSQL:
-            itilcategories_id=={cat_id};status=in=(1,2,3,4)
-            ';' = AND em RSQL. status=in=(1,2,3,4) exclui Solucionado(5) e Fechado(6).
+        O filtro RSQL da API v2.3 mostrou-se ineficaz (o mesmo total de 11.489
+        tickets é retornado independentemente do filtro de categoria). Por isso,
+        buscamos TODOS os tickets de uma só vez e filtramos por categoria e status
+        em Python. Isso reduz as chamadas HTTP de ~690 (100/página × 6 categorias)
+        para ~24 (500/página × 1 passagem), um ganho de ~30×.
 
         Paginação:
-            API v2.3 usa start+limit (não range). HTTP 206 é a resposta normal
-            para resultados paginados. O total vem no header Content-Range: "s-e/total".
+            start/limit com PAGE_SIZE=500. HTTP 206 é a resposta normal para
+            resultados paginados. Total vem em Content-Range: "s-e/total".
 
-        Deduplicação:
-            dict[int, ticket_id] garante que cada chamado apareça uma vez
-            mesmo que apareça em múltiplas categorias.
-
-        _cat_id injetado:
-            Adicionado a cada item para que _chamado_para_dict() saiba se deve
-            verificar o Termo de Responsabilidade.
+        Filtragem em Python:
+            - status: STATUSES_ATIVOS (frozenset O(1))
+            - category.id: deve estar em cat_ids_int (set de IDs configurados)
         """
-        PAGE_SIZE = 100
+        PAGE_SIZE = 500
+        cat_ids_int = {int(c) for c in self.categoria_ids}
         todos: dict[int, dict] = {}
+        start = 0
 
-        for cat_id in self.categoria_ids:
-            start = 0
-            while True:
-                params = {
-                    "filter": f"itilcategories_id=={cat_id};status=in=(1,2,3,4)",
-                    "start":  start,
-                    "limit":  PAGE_SIZE,
-                }
-                url = f"{self.base_url}/Assistance/Ticket"
-                logger.info("Buscando categoria %s (start=%d)", cat_id, start)
-                try:
+        while True:
+            params = {"start": start, "limit": PAGE_SIZE}
+            url = f"{self.base_url}/Assistance/Ticket"
+            logger.info("Buscando tickets (start=%d)", start)
+            try:
+                response = self._session.get(url, params=params, timeout=HTTP_TIMEOUT)
+                if response.status_code == 401:
+                    self._renovar_sessao()
                     response = self._session.get(url, params=params, timeout=HTTP_TIMEOUT)
-                    if response.status_code == 401:
-                        self._renovar_sessao()
-                        response = self._session.get(url, params=params, timeout=HTTP_TIMEOUT)
-                    logger.info("HTTP %s | %d bytes", response.status_code, len(response.content))
+                logger.info("HTTP %s | %d bytes", response.status_code, len(response.content))
 
-                    # 206 Partial Content é a resposta normal para resultados paginados
-                    if not response.ok:
-                        logger.error("Erro (cat %s): %.300s", cat_id, response.text)
-                        break
-                    if not response.text.strip():
-                        logger.info("Categoria %s: sem chamados.", cat_id)
-                        break
+                if not response.ok:
+                    logger.error("Erro ao buscar tickets: %.300s", response.text)
+                    break
+                if not response.text.strip():
+                    break
 
-                    items: list[dict] = response.json()
-                    if not isinstance(items, list):
-                        logger.error("Resposta inesperada (cat %s): %r", cat_id, items)
-                        break
+                items: list[dict] = response.json()
+                if not isinstance(items, list):
+                    logger.error("Resposta inesperada: %r", items)
+                    break
 
-                    # Total vem em Content-Range: "0-99/11489"
-                    content_range = response.headers.get("Content-Range", "")
-                    total = 0
-                    if "/" in content_range:
+                # Total vem em Content-Range: "0-499/11489"
+                content_range = response.headers.get("Content-Range", "")
+                total = 0
+                if "/" in content_range:
+                    try:
+                        total = int(content_range.split("/")[-1])
+                    except ValueError:
+                        pass
+
+                ativos_pagina = 0
+                for item in items:
+                    tid = item.get("id")
+                    if tid is None:
+                        continue
+
+                    # Filtro de status em Python
+                    status_obj = item.get("status") or {}
+                    if isinstance(status_obj, dict):
+                        status_id = status_obj.get("id", 0)
+                    else:
                         try:
-                            total = int(content_range.split("/")[-1])
-                        except ValueError:
-                            pass
+                            status_id = int(status_obj)
+                        except (ValueError, TypeError):
+                            status_id = 0
+                    if status_id not in STATUSES_ATIVOS:
+                        continue
 
-                    for item in items:
-                        tid = item.get("id")
-                        if tid is None:
-                            continue
-                        item["_cat_id"] = int(cat_id)
-                        todos[int(tid)] = item
+                    # Filtro de categoria em Python
+                    cat_obj = item.get("category") or {}
+                    if isinstance(cat_obj, dict):
+                        cat_id = cat_obj.get("id")
+                    else:
+                        try:
+                            cat_id = int(cat_obj)
+                        except (ValueError, TypeError):
+                            cat_id = None
+                    if cat_id not in cat_ids_int:
+                        continue
 
-                    logger.info(
-                        "Categoria %s: %d/%s recebidos.",
-                        cat_id, start + len(items), total or "?",
-                    )
+                    item["_cat_id"] = cat_id
+                    todos[int(tid)] = item
+                    ativos_pagina += 1
 
-                    if not items or (total > 0 and start + len(items) >= total):
-                        break
-                    start += PAGE_SIZE
+                logger.info(
+                    "start=%d: %d recebidos | %d ativos nas categorias alvo | total=%s",
+                    start, len(items), ativos_pagina, total or "?",
+                )
 
-                except requests.exceptions.RequestException as exc:
-                    logger.error("Falha de rede (cat %s, start %d): %s", cat_id, start, exc)
+                if not items or (total > 0 and start + len(items) >= total):
                     break
-                except ValueError as exc:
-                    logger.error("JSON inválido (cat %s): %s", cat_id, exc)
-                    break
+                start += PAGE_SIZE
+
+            except requests.exceptions.RequestException as exc:
+                logger.error("Falha de rede (start=%d): %s", start, exc)
+                break
+            except ValueError as exc:
+                logger.error("JSON inválido (start=%d): %s", start, exc)
+                break
 
         logger.info("Total de chamados ativos: %d", len(todos))
         return list(todos.values())
