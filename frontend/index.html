@@ -116,8 +116,24 @@
     }
     .progress-bar {
       transform-origin: left center;
-      animation: shrink 10s linear forwards;
+      animation: shrink var(--sync-dur, 10s) linear forwards;
     }
+
+    /* Interval select */
+    .interval-select {
+      background: transparent;
+      border: none;
+      outline: none;
+      font-family: 'Geist Mono', ui-monospace, monospace;
+      font-size: 10.5px;
+      color: var(--text-3);
+      cursor: pointer;
+      padding: 0;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    .interval-select:hover { color: var(--text-2); }
+    .interval-select option { background: var(--surface); color: var(--text); }
 
     /* Spinner */
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -350,7 +366,16 @@
           </div>
           <span id="sync-label" class="text-[11.5px]" style="color: var(--text-2);">Aguardando…</span>
         </div>
-        <span id="sync-count" class="mono text-[10.5px]" style="color: var(--text-4);">10s</span>
+        <div class="flex items-center gap-1" style="color: var(--text-4);">
+          <span id="sync-count" class="mono text-[10.5px]"></span>
+          <select id="interval-select" class="interval-select" onchange="onIntervalChange(this.value)" title="Intervalo de atualização">
+            <option value="10">10s</option>
+            <option value="30">30s</option>
+            <option value="60">1 min</option>
+            <option value="120">2 min</option>
+            <option value="300">5 min</option>
+          </select>
+        </div>
       </div>
       <div class="h-[2px] rounded-full overflow-hidden" style="background: var(--line);">
         <div id="progress-bar" class="h-full progress-bar" style="background: var(--accent); width: 100%;"></div>
@@ -867,9 +892,27 @@
   // ═══════════════════════════════════════════════════════
   let countdownTimer = null;
   let secondsLeft = 10;
+  let syncInterval = 10;  // seconds, configurable
+
+  const _SYNC_OPTIONS = [10, 30, 60, 120, 300];
+
+  function loadSyncInterval() {
+    try {
+      const v = parseInt(localStorage.getItem('hub-sync-interval'));
+      if (_SYNC_OPTIONS.includes(v)) syncInterval = v;
+    } catch (e) {}
+  }
+
+  function onIntervalChange(val) {
+    syncInterval = parseInt(val);
+    try { localStorage.setItem('hub-sync-interval', syncInterval); } catch (e) {}
+    clearInterval(countdownTimer);
+    fetchContratacoes();
+  }
 
   function resetProgressBar() {
     const bar = document.getElementById('progress-bar');
+    document.documentElement.style.setProperty('--sync-dur', `${syncInterval}s`);
     bar.style.animation = 'none';
     void bar.offsetWidth;
     bar.style.animation = '';
@@ -877,9 +920,9 @@
 
   function startCountdown() {
     clearInterval(countdownTimer);
-    secondsLeft = 10;
+    secondsLeft = syncInterval;
     resetProgressBar();
-    setSyncLabel(`Próximo sync`);
+    setSyncLabel('Próximo sync');
     document.getElementById('sync-count').textContent = `${secondsLeft}s`;
     countdownTimer = setInterval(() => {
       secondsLeft--;
@@ -1081,7 +1124,7 @@
         <div>
           <p class="text-[13px] font-medium" style="color: var(--text);">Falha ao conectar com o GLPI Sync</p>
           <p class="text-[11.5px] mt-1 mono" style="color: var(--err);">${escHtml(msg)}</p>
-          <p class="text-[11.5px] mt-2" style="color: var(--text-3);">Próxima tentativa em <span class="mono" id="err-count">10s</span> · ou pressione <span class="kbd">R</span> para tentar agora.</p>
+          <p class="text-[11.5px] mt-2" style="color: var(--text-3);">Próxima tentativa em <span class="mono" id="err-count"></span> · ou pressione <span class="kbd">R</span> para tentar agora.</p>
         </div>
       </div>
     </td></tr>`;
@@ -1170,6 +1213,8 @@
   // ═══════════════════════════════════════════════════════
   // Init
   // ═══════════════════════════════════════════════════════
+  loadSyncInterval();
+  document.getElementById('interval-select').value = syncInterval;
   fetchContratacoes();
   fetchHistorico();
 
