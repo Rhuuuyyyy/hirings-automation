@@ -46,7 +46,7 @@ def _computer_url(cid: int) -> str:
 def _user_name(u: dict) -> str:
     fn = (u.get("firstname") or "").strip()
     ln = (u.get("realname")  or "").strip()
-    return f"{fn} {ln}".strip() or u.get("name") or u.get("login") or f"#{u.get('id','?')}"
+    return f"{fn} {ln}".strip() or u.get("name") or u.get("username") or u.get("login") or f"#{u.get('id','?')}"
 
 def _is_inactive(u: dict) -> bool:
     """Retorna True se o usuário está inativo (is_active == 0 / 'Não' / False)."""
@@ -75,9 +75,10 @@ def _extract_id(obj_or_id: Any) -> int | None:
 def _extract_cc(obj: dict) -> tuple[str | None, str | None]:
     """
     Retorna (cc_id, cc_name) do campo de localização/centro de custo.
-    Tenta: locations_id, location_id, location.
+    Tenta: location, entity, locations_id, location_id.
+    A API v2.3 retorna objetos dict com 'id'/'name'/'completename'.
     """
-    for field in ("locations_id", "location_id", "location"):
+    for field in ("location", "entity", "locations_id", "location_id"):
         raw = obj.get(field)
         if raw is None:
             continue
@@ -164,13 +165,6 @@ class AnalisadorUsuarios:
         logger.info("Usuários obtidos: %d | Computadores: %d",
                     len(usuarios_raw), len(computadores_raw))
 
-        # Log field keys to diagnose field name mismatches
-        if usuarios_raw:
-            logger.info("User[0] keys: %s", sorted(usuarios_raw[0].keys()))
-            logger.info("User[0] sample: %s", {k: usuarios_raw[0][k] for k in list(usuarios_raw[0].keys())[:20]})
-        if computadores_raw:
-            logger.info("Computer[0] keys: %s", sorted(computadores_raw[0].keys()))
-            logger.info("Computer[0] sample: %s", {k: computadores_raw[0][k] for k in list(computadores_raw[0].keys())[:20]})
 
         # Mapas em memória
         user_map: dict[int, dict] = {}
@@ -190,7 +184,7 @@ class AnalisadorUsuarios:
         comp_to_users: dict[int, list[int]] = {}
 
         for cid, comp in comp_map.items():
-            for field in ("users_id", "users_id_tech"):
+            for field in ("user", "user_tech"):
                 uid = _extract_id(comp.get(field))
                 if uid and uid in user_map:
                     user_to_comps.setdefault(uid, [])
