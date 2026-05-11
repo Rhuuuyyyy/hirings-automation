@@ -560,15 +560,17 @@ async def sync_analise_usuarios(background_tasks: BackgroundTasks) -> JSONRespon
 
     def _run():
         try:
-            from automations.contratacoes.glpi_sync import ClienteGLPI
+            from automations.contratacoes.glpi_sync import ClienteGLPI, carregar_configuracoes
+            config = carregar_configuracoes()
             glpi = ClienteGLPI(
-                base_url=os.getenv("API_URL", ""),
-                token_url=os.getenv("OAUTH_TOKEN_URL", ""),
-                client_id=os.getenv("OAUTH_CLIENT_ID", ""),
-                client_secret=os.getenv("OAUTH_CLIENT_SECRET", ""),
-                username=os.getenv("OAUTH_USERNAME", ""),
-                password=os.getenv("OAUTH_PASSWORD", ""),
-                categoria_ids=[],
+                base_url=config["API_URL"],
+                token_url=config["OAUTH_TOKEN_URL"],
+                client_id=config["OAUTH_CLIENT_ID"],
+                client_secret=config["OAUTH_CLIENT_SECRET"],
+                username=config["OAUTH_USERNAME"],
+                password=config["OAUTH_PASSWORD"],
+                categoria_ids=config["CATEGORIA_IDS"],
+                cats_com_ativo=config["CATS_COM_ATIVO"],
             )
             usuarios_sync.executar(glpi)
         except Exception as exc:
