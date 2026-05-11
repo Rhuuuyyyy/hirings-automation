@@ -164,11 +164,13 @@ class AnalisadorUsuarios:
         logger.info("Usuários obtidos: %d | Computadores: %d",
                     len(usuarios_raw), len(computadores_raw))
 
-        # Log field keys once (for debugging unknown environments)
+        # Log field keys to diagnose field name mismatches
         if usuarios_raw:
-            logger.debug("User[0] keys: %s", sorted(usuarios_raw[0].keys()))
+            logger.info("User[0] keys: %s", sorted(usuarios_raw[0].keys()))
+            logger.info("User[0] sample: %s", {k: usuarios_raw[0][k] for k in list(usuarios_raw[0].keys())[:20]})
         if computadores_raw:
-            logger.debug("Computer[0] keys: %s", sorted(computadores_raw[0].keys()))
+            logger.info("Computer[0] keys: %s", sorted(computadores_raw[0].keys()))
+            logger.info("Computer[0] sample: %s", {k: computadores_raw[0][k] for k in list(computadores_raw[0].keys())[:20]})
 
         # Mapas em memória
         user_map: dict[int, dict] = {}
