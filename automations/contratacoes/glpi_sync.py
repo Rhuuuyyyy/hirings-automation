@@ -197,7 +197,7 @@ def _limpar_html(texto: str) -> str:
            [^>]+ captura tudo que está entre < e >, incluindo atributos.
            Substituído por " " (espaço) para não fundir palavras adjacentes
            como "<b>termo</b>de" → "termo de" (não "termode").
-        3. re.sub(\s+)      — colapsa sequências de espaços, tabs e quebras
+        3. re.sub(\\s+)     — colapsa sequências de espaços, tabs e quebras
            de linha em um único espaço e remove espaços nas bordas (.strip()).
            Necessário porque a remoção das tags deixa múltiplos espaços.
     """
@@ -712,9 +712,9 @@ class ClienteGLPI:
         Detalhes do padrão regex:
             Data de in[íi]cio  → tolera com ou sem acento (normalização de
                                   encoding às vezes remove o acento).
-            (?:<[^>]+>|&nbsp;|\s)*  → ignora tags HTML e espaços entre
+            (?:<[^>]+>|&nbsp;|\\s)* → ignora tags HTML e espaços entre
                                        o rótulo e o valor da data.
-            (\d{2}[-/]\d{2}[-/]\d{4})  → captura DD-MM-YYYY ou DD/MM/YYYY.
+            (\\d{2}[-/]\\d{2}[-/]\\d{4}) → captura DD-MM-YYYY ou DD/MM/YYYY.
             .replace("-", "/")  → normaliza para DD/MM/YYYY (padrão do sistema).
 
         Custo extra de rede:
@@ -1096,7 +1096,7 @@ class SincronizadorDB:
 
         ensure_ascii=False:
             Preserva caracteres UTF-8 (acentos, ç) no JSON em vez de
-            escapá-los como \uXXXX. Reduz o tamanho do arquivo e torna-o
+            escapá-los como \\uXXXX. Reduz o tamanho do arquivo e torna-o
             legível diretamente em qualquer editor.
 
         indent=2:
