@@ -1,8 +1,8 @@
 """
-diagnostico_api.py — Script de diagnóstico da API Verdanadesk (fase 3).
+diagnostico_api.py — fase 4: descobrir paths reais do v2.3.
 Execute: python diagnostico_api.py
 """
-import os, json, sys, base64
+import os, json, sys
 from pathlib import Path
 import requests
 from dotenv import load_dotenv
@@ -15,98 +15,90 @@ USERNAME      = os.getenv("OAUTH_USERNAME", "")
 PASSWORD      = os.getenv("OAUTH_PASSWORD", "")
 
 API_ROOT = "https://dexian.verdanadesk.com/api.php"
-V1       = f"{API_ROOT}/v1"
+V23      = f"{API_ROOT}/v2.3"
 TOKEN_URL = f"{API_ROOT}/token"
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-def show(label, resp):
-    try:
-        body = json.dumps(resp.json(), ensure_ascii=False, indent=2)[:1500]
-    except Exception:
-        body = resp.text[:1500]
-    print(f"  [{resp.status_code}] {label}")
-    print(body)
-    print()
-
-def get(url, headers, params=None):
-    return requests.get(url, headers=headers, params=params, timeout=10)
-
-# ── 1. Obter Bearer token OAuth2 ─────────────────────────────────────────────
-print("=== 1. Bearer token OAuth2 ===")
+# ── Bearer token ──────────────────────────────────────────────────────────────
 r = requests.post(TOKEN_URL, data={
     "grant_type": "password", "client_id": CLIENT_ID,
     "client_secret": CLIENT_SECRET, "username": USERNAME,
     "password": PASSWORD, "scope": "api",
 }, timeout=15)
-bearer = r.json().get("access_token", "") if r.ok else ""
-print(f"  Status: {r.status_code} | bearer obtido: {'SIM' if bearer else 'NÃO'}")
+bearer = r.json().get("access_token", "")
+print(f"Bearer: {'OK' if bearer else 'FALHOU'}\n")
+H = {"Authorization": f"Bearer {bearer}", "Accept": "application/json"}
+
+def show(label, resp):
+    try:
+        body = json.dumps(resp.json(), ensure_ascii=False, indent=2)[:2000]
+    except Exception:
+        body = resp.text[:2000]
+    print(f"[{resp.status_code}] {label}")
+    print(body); print()
+
+def get(url, params=None, extra=None):
+    return requests.get(url, headers={**H, **(extra or {})}, params=params, timeout=10)
+
+# ── 1. Buscar spec OpenAPI com auth ───────────────────────────────────────────
+print("=== 1. OpenAPI spec com Bearer ===")
+for path in ["/doc.json", "/swagger.json", "/openapi.json", "/api.json", "/doc/openapi.json"]:
+    r2 = get(f"{V23}{path}")
+    paths_count = "N/A"
+    if r2.ok:
+        try:
+            data = r2.json()
+            paths_count = str(list(data.get("paths", {}).keys())[:10])
+        except Exception:
+            pass
+    print(f"  {r2.status_code} | {V23}{path} | paths={paths_count}")
 print()
 
-# ── 2. v1 + App-Token = client_id + initSession com Basic auth ────────────────
-print("=== 2. v1 — App-Token = client_id + Basic auth (username:password) ===")
-b64 = base64.b64encode(f"{USERNAME}:{PASSWORD}".encode()).decode()
-h = {"App-Token": CLIENT_ID, "Authorization": f"Basic {b64}"}
-show("GET /v1/initSession (Basic)", get(f"{V1}/initSession", h))
-
-# ── 3. v1 + App-Token = client_secret + Basic auth ───────────────────────────
-print("=== 3. v1 — App-Token = client_secret + Basic auth ===")
-h = {"App-Token": CLIENT_SECRET, "Authorization": f"Basic {b64}"}
-show("GET /v1/initSession (client_secret como App-Token)", get(f"{V1}/initSession", h))
-
-# ── 4. v1 + App-Token = bearer como App-Token + Basic auth ───────────────────
-print("=== 4. v1 — App-Token = Bearer JWT + Basic auth ===")
-h = {"App-Token": bearer, "Authorization": f"Basic {b64}"}
-show("GET /v1/initSession (Bearer como App-Token)", get(f"{V1}/initSession", h))
-
-# ── 5. v1 + somente Bearer como header Authorization ─────────────────────────
-print("=== 5. v1 — só Authorization: Bearer (sem App-Token) ===")
-h = {"Authorization": f"Bearer {bearer}"}
-show("GET /v1/Ticket (só Bearer)", get(f"{V1}/Ticket", h))
-
-# ── 6. v1 + App-Token = client_id + Bearer (sem initSession) ─────────────────
-print("=== 6. v1 — App-Token = client_id + Authorization: Bearer ===")
-h = {"App-Token": CLIENT_ID, "Authorization": f"Bearer {bearer}"}
-show("GET /v1/Ticket (client_id + Bearer)", get(f"{V1}/Ticket", h))
-
-# ── 7. v1 + App-Token = client_secret + Bearer ───────────────────────────────
-print("=== 7. v1 — App-Token = client_secret + Authorization: Bearer ===")
-h = {"App-Token": CLIENT_SECRET, "Authorization": f"Bearer {bearer}"}
-show("GET /v1/Ticket (client_secret + Bearer)", get(f"{V1}/Ticket", h))
-
-# ── 8. Se algum initSession funcionou → usar o session_token em /v1/Ticket ───
-print("=== 8. Fluxo completo: initSession com client_id como App-Token ===")
-for app_tok_name, app_tok_val in [("client_id", CLIENT_ID), ("client_secret", CLIENT_SECRET)]:
-    h_init = {"App-Token": app_tok_val, "Authorization": f"Basic {b64}"}
-    ri = get(f"{V1}/initSession", h_init)
-    if ri.ok:
-        sess = ri.json().get("session_token")
-        if sess:
-            print(f"  initSession OK com App-Token={app_tok_name}, session_token={sess[:20]}...")
-            h_api = {"App-Token": app_tok_val, "Session-Token": sess}
-            show("GET /v1/Ticket (com session_token)",
-                 get(f"{V1}/Ticket", h_api, params={"range": "0-4"}))
-            show("GET /v1/search/Ticket",
-                 get(f"{V1}/search/Ticket", h_api,
-                     params={"criteria[0][field]": "2",
-                             "criteria[0][searchtype]": "contains",
-                             "criteria[0][value]": "",
-                             "range": "0-4"}))
-            break
+# ── 2. Muitas variações de nome de recurso ────────────────────────────────────
+print("=== 2. Variações de recurso em v2.3 ===")
+resources = [
+    "Ticket", "ticket", "tickets", "Tickets",
+    "Helpdesk", "helpdesk", "HelpDesk",
+    "Issue", "issues", "Request", "requests",
+    "TicketRequest", "ItilTicket", "ITIL",
+    "User", "user", "users",
+    "Profile", "Entity", "Category",
+    "ITILCategory", "Status", "status",
+    "me", "whoami", "self",
+]
+for res in resources:
+    r3 = get(f"{V23}/{res}")
+    if r3.status_code != 404:
+        print(f"  *** {r3.status_code} | /{res} *** ← diferente de 404!")
     else:
-        print(f"  initSession com App-Token={app_tok_name} → {ri.status_code}")
+        print(f"  {r3.status_code} | /{res}")
 print()
 
-# ── 9. v2.3 com scope api+user ────────────────────────────────────────────────
-print("=== 9. OAuth2 scope=api+user e tentar /v2.3/Ticket ===")
-r2 = requests.post(TOKEN_URL, data={
-    "grant_type": "password", "client_id": CLIENT_ID,
-    "client_secret": CLIENT_SECRET, "username": USERNAME,
-    "password": PASSWORD, "scope": "api user",
-}, timeout=15)
-if r2.ok:
-    t2 = r2.json().get("access_token", "")
-    show("GET /v2.3/Ticket (scope=api user)",
-         get(f"{API_ROOT}/v2.3/Ticket",
-             {"Authorization": f"Bearer {t2}", "Accept": "application/json"}))
-else:
-    print(f"  scope=api user falhou: {r2.status_code} {r2.text[:200]}")
+# ── 3. Accept: application/vnd.api+json (JSON:API spec) ───────────────────────
+print("=== 3. JSON:API content-type ===")
+jsonapi_h = {"Authorization": f"Bearer {bearer}",
+             "Accept": "application/vnd.api+json",
+             "Content-Type": "application/vnd.api+json"}
+for path in ["/Ticket", "/tickets", "/helpdesk"]:
+    r4 = requests.get(f"{V23}{path}", headers=jsonapi_h, timeout=10)
+    print(f"  {r4.status_code} | {path} (JSON:API) | {r4.text[:200]}")
+print()
+
+# ── 4. v2.3 doc HTML — tentar extrair URL do spec ────────────────────────────
+print("=== 4. v2.3/doc HTML (procurando URL do spec) ===")
+r5 = requests.get(f"{V23}/doc", headers=H, timeout=10)
+print(f"  {r5.status_code} | content-type: {r5.headers.get('content-type', '?')}")
+text = r5.text
+# Procurar URLs de spec no HTML
+import re
+urls = re.findall(r'["\']([^"\']*(?:swagger|openapi|api\.json|spec)[^"\']*)["\']', text, re.I)
+print(f"  URLs encontradas no HTML: {urls[:10]}")
+# Procurar src de JS também
+srcs = re.findall(r'src=["\']([^"\']+)["\']', text)
+print(f"  Scripts: {srcs[:5]}")
+print()
+
+# ── 5. Tentar sem versão path mas com query param ─────────────────────────────
+print("=== 5. Outros padrões ===")
+show("GET /v2.3/Ticket?range=0-0", get(f"{V23}/Ticket", {"range": "0-0"}))
+show("GET /v2.3 (raiz da versão)", get(f"{V23}"))
+show("GET /v2.3/ (com barra)", get(f"{V23}/"))
