@@ -1,9 +1,6 @@
 """
-diagnostico_api.py — Script temporário para descobrir o formato correto
-da API Verdanadesk v2.3.
-
+diagnostico_api.py — Script de diagnóstico da API Verdanadesk v2.3.
 Execute: python diagnostico_api.py
-Requer o .env configurado com API_URL, OAUTH_* etc.
 """
 import os, json, sys
 from pathlib import Path
@@ -20,13 +17,17 @@ PASSWORD      = os.getenv("OAUTH_PASSWORD", "")
 
 import re
 TOKEN_URL = re.sub(r"/v[\d.]+$", "/token", API_URL)
+BASE       = re.sub(r"/api\.php.*$", "", API_URL)   # https://dexian.verdanadesk.com
+API_ROOT   = re.sub(r"/v[\d.]+$", "", API_URL)      # https://dexian.verdanadesk.com/api.php
 
-print(f"API_URL   : {API_URL}")
-print(f"TOKEN_URL : {TOKEN_URL}")
+print(f"API_URL  : {API_URL}")
+print(f"BASE     : {BASE}")
+print(f"API_ROOT : {API_ROOT}")
+print(f"TOKEN_URL: {TOKEN_URL}")
 print()
 
 # ── 1. Autenticar ─────────────────────────────────────────────────────────────
-print("=== 1. Obtendo token OAuth2 ===")
+print("=== 1. OAuth2 ===")
 r = requests.post(TOKEN_URL, data={
     "grant_type":    "password",
     "client_id":     CLIENT_ID,
@@ -39,47 +40,66 @@ print(f"Status: {r.status_code}")
 if not r.ok:
     print("ERRO:", r.text); sys.exit(1)
 token = r.json().get("access_token")
-print(f"Token obtido: {token[:20]}...{token[-10:]}")
+print(f"Token: {token[:20]}...")
 print()
 
-headers = {"Authorization": f"Bearer {token}"}
+H = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
-def get(path, params=None):
-    url = f"{API_URL}{path}"
-    resp = requests.get(url, headers=headers, params=params, timeout=15)
-    print(f"  GET {url}")
-    if params:
-        print(f"  Params: {params}")
-    print(f"  Status: {resp.status_code} | {len(resp.content)} bytes")
+def test(label, url, params=None, method="GET"):
+    print(f"--- {label}")
     try:
-        data = resp.json()
-        print(f"  Body (primeiras chaves): {list(data.keys()) if isinstance(data, dict) else f'lista com {len(data)} items'}")
-        if isinstance(data, dict) and "data" in data:
-            items = data["data"]
-            print(f"  data[0] chaves: {list(items[0].keys()) if items else '(vazio)'}")
-        elif isinstance(data, list) and data:
-            print(f"  item[0] chaves: {list(data[0].keys())}")
-        print(f"  Resposta completa:\n{json.dumps(data, ensure_ascii=False, indent=2)[:1500]}")
-    except Exception:
-        print(f"  Texto: {resp.text[:500]}")
+        if method == "GET":
+            resp = requests.get(url, headers=H, params=params, timeout=10)
+        else:
+            resp = requests.options(url, headers=H, timeout=10)
+        body = resp.text[:600]
+        try:
+            body = json.dumps(resp.json(), ensure_ascii=False)[:600]
+        except Exception:
+            pass
+        print(f"    {resp.status_code} | {url}" + (f"?{params}" if params else ""))
+        print(f"    {body}")
+    except Exception as e:
+        print(f"    ERRO: {e}")
     print()
-    return resp
 
-# ── 2. Testar endpoints de Ticket ─────────────────────────────────────────────
-print("=== 2. GET /Ticket (sem filtro, primeiros 5) ===")
-get("/Ticket", {"range": "0-4"})
+# ── 2. Explorar base URL sem versão ───────────────────────────────────────────
+print("=== 2. Variações de base URL ===")
+test("api.php raiz",             f"{API_ROOT}/")
+test("api.php sem versão /Ticket", f"{API_ROOT}/Ticket")
+test("api.php /v2/Ticket",       f"{API_ROOT}/v2/Ticket")
+test("api.php /v2.3/Ticket",     f"{API_ROOT}/v2.3/Ticket")
 
-print("=== 3. GET /Ticket com filter RSQL itilcategories_id==166 ===")
-get("/Ticket", {"filter": "itilcategories_id==166", "range": "0-4"})
+# ── 3. Variações de nome de recurso ───────────────────────────────────────────
+print("=== 3. Variações de nome de recurso ===")
+test("ticket (minúsculo)",       f"{API_URL}/ticket")
+test("tickets (plural)",         f"{API_URL}/tickets")
+test("helpdesk",                 f"{API_URL}/helpdesk")
+test("Ticket",                   f"{API_URL}/Ticket")
+test("ITILCategory",             f"{API_URL}/ITILCategory")
 
-print("=== 4. GET /Ticket com query param direto ===")
-get("/Ticket", {"itilcategories_id": "166", "range": "0-4"})
+# ── 4. Sem o bearer — ver se muda o erro ─────────────────────────────────────
+print("=== 4. Sem Authorization header ===")
+r2 = requests.get(f"{API_URL}/Ticket", timeout=10)
+print(f"    {r2.status_code} | {r2.text[:300]}")
+print()
 
-print("=== 5. GET /search/Ticket (formato v1 — esperado 404) ===")
-get("/search/Ticket", {"criteria[0][field]": "7", "criteria[0][searchtype]": "equals", "criteria[0][value]": "166"})
+# ── 5. OPTIONS para ver métodos permitidos ────────────────────────────────────
+print("=== 5. OPTIONS /Ticket ===")
+r3 = requests.options(f"{API_URL}/Ticket", headers=H, timeout=10)
+print(f"    Status: {r3.status_code}")
+print(f"    Allow: {r3.headers.get('Allow', '(vazio)')}")
+print(f"    Body: {r3.text[:300]}")
+print()
 
-print("=== 6. GET /Ticket/166 (ticket específico, se existir) ===")
-get("/Ticket/166")
+# ── 6. Tentar endpoint de usuário atual (me / User) ──────────────────────────
+print("=== 6. Endpoints de usuário (para confirmar auth funciona) ===")
+test("User (minha conta)",  f"{API_URL}/User/me")
+test("User sem ID",         f"{API_URL}/User")
+test("getMyProfiles",       f"{API_URL}/getMyProfiles")
+test("getActiveProfile",    f"{API_URL}/getActiveProfile")
 
-print("=== 7. Listar endpoints disponíveis na raiz ===")
-get("/")
+# ── 7. Token info ─────────────────────────────────────────────────────────────
+print("=== 7. Tentar obter info do token ===")
+test("token info", f"{BASE}/api.php/token/info")
+test("introspect",  f"{BASE}/api.php/token/introspect")
