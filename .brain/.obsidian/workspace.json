@@ -1,0 +1,195 @@
+{
+  "main": {
+    "id": "787286779ee61901",
+    "type": "split",
+    "children": [
+      {
+        "id": "88b9e1736eb81163",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "fe968fa54fa1432a",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "excel_schema.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "excel_schema"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "756ee403b33845e8",
+    "type": "split",
+    "children": [
+      {
+        "id": "bd107ba68283fb65",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "9934d969c6f84224",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Explorador de arquivos"
+            }
+          },
+          {
+            "id": "9c23c4294dcf39f4",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Procurar"
+            }
+          },
+          {
+            "id": "92c9c21998a70e62",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Marcadores"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "f89b966c7c8002cc",
+    "type": "split",
+    "children": [
+      {
+        "id": "7b669021cc0c520e",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "e7ad399aca04bf88",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "excel_schema.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Links inversos para excel_schema"
+            }
+          },
+          {
+            "id": "6d37f1a81835db2c",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "excel_schema.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Links de saída para excel_schema"
+            }
+          },
+          {
+            "id": "6866d8b68fc87f16",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Etiquetas"
+            }
+          },
+          {
+            "id": "9e8e1df03bd1bd41",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "Todas as propriedades"
+            }
+          },
+          {
+            "id": "74e884175a47d1f2",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "excel_schema.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Sumário de excel_schema"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Abrir a troca rápida": false,
+      "graph:Abrir visualização em gráfico": false,
+      "canvas:Criar novo canvas": false,
+      "daily-notes:Abrir a nota de hoje": false,
+      "templates:Inserir modelo": false,
+      "command-palette:Abrir paleta de comandos": false,
+      "bases:Criar nova base": false
+    }
+  },
+  "active": "fe968fa54fa1432a",
+  "lastOpenFiles": [
+    "sharepoint_graph_api.md",
+    "task_automation.md",
+    "roadmap.md",
+    "excel_schema.md",
+    "architecture.md",
+    "glpi_api_quirks.md"
+  ]
+}

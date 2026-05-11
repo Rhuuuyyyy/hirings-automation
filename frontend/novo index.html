@@ -760,16 +760,16 @@
   }
 
   const TERMO_ICON = {
-    'Termo OK':          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`,
-    'Pendente':          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2"/></svg>`,
-    'Sem tarefa':        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14"/></svg>`,
-    'Erro ao verificar': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>`,
+    'Termo enviado': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`,
+    'Pendente de envio': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2"/></svg>`,
+    'Sem equipamento': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14"/></svg>`,
+    'Erro ao criar tarefa': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>`,
   };
   const TERMO_COLOR = {
-    'Termo OK':          'var(--ok)',
-    'Pendente':          'var(--warn)',
-    'Sem tarefa':        'var(--err)',
-    'Erro ao verificar': 'var(--err)',
+    'Termo enviado':        'var(--ok)',
+    'Pendente de envio':    'var(--warn)',
+    'Sem equipamento':      'var(--text-4)',
+    'Erro ao criar tarefa': 'var(--err)',
   };
   function termoCell(text) {
     const c = TERMO_COLOR[text] || 'var(--text-4)';
@@ -913,13 +913,13 @@
     const byStatus = (s) => allChamados.filter(c => c.Status === s).length;
     document.getElementById('stat-atend').textContent = byStatus('Em Atendimento');
     document.getElementById('stat-pend').textContent  = byStatus('Pendente');
-    document.getElementById('stat-termo').textContent = allChamados.filter(c => c.Termo_Status === 'Termo OK').length;
+    document.getElementById('stat-termo').textContent = allChamados.filter(c => c.Termo_Status === 'Termo enviado').length;
 
     document.getElementById('count-all').textContent   = total;
     document.getElementById('count-novo').textContent  = byStatus('Novo');
     document.getElementById('count-atend').textContent = byStatus('Em Atendimento');
     document.getElementById('count-pend').textContent  = byStatus('Pendente');
-    document.getElementById('count-termos').textContent = allChamados.filter(c => c.Termo_Status && c.Termo_Status !== 'Sem tarefa').length;
+    document.getElementById('count-termos').textContent = allChamados.filter(c => c.Termo_Status && c.Termo_Status !== 'Sem equipamento').length;
 
     if (data.ultima_atualizacao) {
       const d = new Date(data.ultima_atualizacao);
@@ -938,7 +938,7 @@
   function applyFilters() {
     let rows = allChamados.slice();
     if (activeStatusFilter === '__termos') {
-      rows = rows.filter(c => c.Termo_Status && c.Termo_Status !== 'Sem tarefa');
+      rows = rows.filter(c => c.Termo_Status && c.Termo_Status !== 'Sem equipamento');
     } else if (activeStatusFilter !== 'all') {
       rows = rows.filter(c => c.Status === activeStatusFilter);
     }
@@ -1134,7 +1134,10 @@
     opt.addEventListener('click', () => {
       const fmt = opt.dataset.format;
       exportMenu.classList.add('hidden');
-      exportar(fmt);
+      const rows = applyFilters();
+      console.log(`[export ${fmt}]`, rows.length, 'chamados');
+      // Hook real export here when backend route is ready, e.g.:
+      // window.location = `/api/contratacoes/export?format=${fmt}&filter=${activeStatusFilter}`;
     });
   });
 
@@ -1195,37 +1198,6 @@
     const idx = parseInt(tr.dataset.idx, 10);
     if (rows[idx]) openDrawer(rows[idx]);
   });
-
-  // ═══════════════════════════════════════════════════════
-  // Export
-  // ═══════════════════════════════════════════════════════
-  function exportar(formato) {
-    const btn = document.getElementById('export-btn');
-    const LABEL = { xlsx: 'Planilha', pdf: 'PDF', csv: 'CSV' };
-    const originalHtml = btn ? btn.innerHTML : '';
-    if (btn) {
-      btn.style.opacity = '0.55';
-      btn.style.pointerEvents = 'none';
-      btn.innerHTML = `
-        <svg class="w-3.5 h-3.5 spin" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-        </svg>
-        <span>Gerando ${LABEL[formato] || formato}…</span>`;
-    }
-    const a = document.createElement('a');
-    a.href = `/api/contratacoes/export?formato=${encodeURIComponent(formato)}`;
-    a.download = '';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => {
-      if (btn) {
-        btn.innerHTML = originalHtml;
-        btn.style.opacity = '';
-        btn.style.pointerEvents = '';
-      }
-    }, 2000);
-  }
 
   // ═══════════════════════════════════════════════════════
   // Init
