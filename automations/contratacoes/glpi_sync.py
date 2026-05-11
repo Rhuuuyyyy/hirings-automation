@@ -176,6 +176,19 @@ STATUSES_ATIVOS = frozenset({1, 2, 3, 4})
 _TEXTO_TAREFA_TERMO   = "termo de responsabilidade"
 _GLPI_TASK_STATE_DONE = 2  # valor numérico que o GLPI usa para "tarefa concluída"
 
+# Padrão para extração de "Data de início: DD/MM/YYYY" do HTML do chamado.
+# Compilado uma vez no módulo para reutilização em todos os tickets.
+_PADRAO_DATA_INICIO = re.compile(
+    r"Data\s+de\s+in[íi]cio\s*:?\s*(?:<[^>]+>|&nbsp;|\s)*(\d{2}[-/]\d{2}[-/]\d{4})",
+    re.IGNORECASE,
+)
+
+
+def _extrair_data_inicio(html: str) -> str:
+    """Extrai DD/MM/YYYY de um bloco HTML, ou retorna ''."""
+    m = _PADRAO_DATA_INICIO.search(html or "")
+    return m.group(1).replace("-", "/") if m else ""
+
 
 def _limpar_html(texto: str) -> str:
     """
@@ -688,46 +701,24 @@ class ClienteGLPI:
         logger.info("Total de chamados ativos: %d", len(todos))
         return list(todos.values())
 
-    def buscar_data_inicio_do_conteudo(self, ticket_id: int) -> str:
+    def buscar_data_inicio_nos_followups(self, ticket_id: int) -> str:
         """
-        Fallback para extrair "Data de início: DD/MM/YYYY" quando sla_ttr é None.
-
-        Busca em ordem:
-            1. Corpo do chamado (campo content do ticket)
-            2. Comentários/seguimentos: GET /Assistance/Ticket/{id}/Timeline/ITILFollowup
-
-        Regex tolera:
-            - "Data de início:" / "Data de inicio:" (acento opcional)
-            - Tags HTML e &nbsp; entre rótulo e valor
-            - DD-MM-YYYY e DD/MM/YYYY → normaliza para DD/MM/YYYY
-
-        Retorna "" se não encontrar em nenhuma fonte — o dashboard exibe "—".
+        Busca "Data de início: DD/MM/YYYY" nos comentários/seguimentos do ticket.
+        Chamado apenas quando sla_ttr é None E o corpo do chamado não contém a data.
+        O corpo já foi verificado em _chamado_para_dict() sem custo extra de rede.
         """
-        _PADRAO = re.compile(
-            r"Data de in[íi]cio:\s*(?:<[^>]+>|&nbsp;|\s)*(\d{2}[-/]\d{2}[-/]\d{4})",
-            re.IGNORECASE,
-        )
-
-        def _match(html: str) -> str:
-            m = _PADRAO.search(html or "")
-            return m.group(1).replace("-", "/") if m else ""
-
         try:
-            # 1. Corpo do chamado
-            dados = self._get(f"{self.base_url}/Assistance/Ticket/{ticket_id}")
-            result = _match(dados.get("content", "") or "")
-            if result:
-                return result
-
-            # 2. Comentários (seguimentos / ITILFollowup)
             followups = self._get(
                 f"{self.base_url}/Assistance/Ticket/{ticket_id}/Timeline/ITILFollowup"
             )
             if isinstance(followups, list):
                 for fu in followups:
-                    result = _match(fu.get("content", "") or "")
-                    if result:
-                        return result
+                    # v2.3 Timeline pode envolver o objeto sob a chave "item"
+                    item_data = fu.get("item") if isinstance(fu.get("item"), dict) else fu
+                    for campo in ("content", "name", "description"):
+                        result = _extrair_data_inicio(item_data.get(campo, "") or "")
+                        if result:
+                            return result
         except Exception:
             pass
         return ""
@@ -786,37 +777,39 @@ class ClienteGLPI:
         try:
             resp = self._get(f"{self.base_url}/Assistance/Ticket/{ticket_id}/Timeline/Task")
 
-            # API retorna dict de erro ou {} quando não há tarefas — não é lista.
             if not isinstance(resp, list):
-                logger.debug(
-                    "Ticket #%d: resposta de TicketTask não é lista: %r", ticket_id, resp
-                )
                 return "Sem tarefa"
 
-            tarefas: list[dict] = resp
-            logger.debug("Ticket #%d: %d tarefa(s) retornada(s) pelo GLPI.", ticket_id, len(tarefas))
+            if not resp:
+                return "Sem tarefa"
 
-            for i, tarefa in enumerate(tarefas):
-                raw_content = tarefa.get("content", "") or ""
-                raw_name    = tarefa.get("name", "")    or ""
+            # Log INFO das chaves da primeira tarefa para diagnóstico de campo
+            logger.info(
+                "Ticket #%d: campos da tarefa[0]: %s",
+                ticket_id, list(resp[0].keys()),
+            )
 
-                # Log do conteúdo bruto para diagnóstico — visível com DEBUG
-                logger.debug(
-                    "Ticket #%d | tarefa[%d] name=%r  content(raw)=%.300r",
-                    ticket_id, i, raw_name, raw_content,
-                )
+            for i, tarefa in enumerate(tarefas := resp):
+                # v2.3 Timeline envolve o objeto real sob a chave "item"
+                item_data = tarefa.get("item") if isinstance(tarefa.get("item"), dict) else tarefa
 
-                # Limpa HTML de ambos os campos e concatena para busca
-                texto_limpo = _limpar_html(raw_content + " " + raw_name)
+                # Agrega todos os campos textuais conhecidos
+                partes = []
+                for campo in ("content", "name", "description", "text"):
+                    partes.append(item_data.get(campo, "") or "")
+                    partes.append(tarefa.get(campo, "") or "")     # fallback no envelope
 
-                logger.debug(
-                    "Ticket #%d | tarefa[%d] texto_limpo=%.300r",
+                texto_limpo = _limpar_html(" ".join(partes))
+                logger.info(
+                    "Ticket #%d | tarefa[%d] texto_limpo=%.200r",
                     ticket_id, i, texto_limpo,
                 )
 
                 if _TEXTO_TAREFA_TERMO.lower() in texto_limpo.lower():
                     try:
-                        state = int(tarefa.get("state", 0) or 0)
+                        state = int(
+                            item_data.get("state", tarefa.get("state", 0)) or 0
+                        )
                     except (ValueError, TypeError):
                         state = 0
 
@@ -825,20 +818,14 @@ class ClienteGLPI:
                         ticket_id, state,
                         "Termo OK" if state >= _GLPI_TASK_STATE_DONE else "Pendente",
                     )
-
                     if state >= _GLPI_TASK_STATE_DONE:
                         self._termos_concluidos.add(ticket_id)
                         return "Termo OK"
                     return "Pendente"
 
-            # Nenhuma tarefa bateu — loga nomes para facilitar diagnóstico
-            nomes = [
-                _limpar_html(t.get("name", "") or t.get("content", "") or "")[:60]
-                for t in tarefas
-            ]
             logger.info(
-                "Ticket #%d: tarefa de termo NÃO encontrada entre %d tarefa(s). Nomes: %s",
-                ticket_id, len(tarefas), nomes or "(nenhuma)",
+                "Ticket #%d: tarefa de termo NÃO encontrada entre %d tarefa(s).",
+                ticket_id, len(tarefas),
             )
             return "Sem tarefa"
 
@@ -1001,10 +988,12 @@ class SincronizadorDB:
                 requerente = f"{firstname} {realname}".strip() or (member.get("name") or "")
                 break
 
-        # SLA deadline: campo sla_ttr (ISO 8601 ou None)
+        # SLA deadline: sla_ttr → corpo do chamado (em memória) → followups
         tempo_solucao = _formatar_datetime(chamado.get("sla_ttr"))
         if not tempo_solucao:
-            tempo_solucao = self.glpi.buscar_data_inicio_do_conteudo(ticket_id)
+            tempo_solucao = _extrair_data_inicio(chamado.get("content", "") or "")
+        if not tempo_solucao:
+            tempo_solucao = self.glpi.buscar_data_inicio_nos_followups(ticket_id)
 
         # cat_id injetado por buscar_chamados_ativos; fallback para campo category
         cat_id = chamado.get("_cat_id")
