@@ -1,8 +1,8 @@
 """
-diagnostico_api.py — fase 6: listar TODOS os paths e testar Helpdesk/Ticket.
+diagnostico_api.py — fase 7: campos, filtros e tasks de /Assistance/Ticket.
 Execute: python diagnostico_api.py
 """
-import os, json, sys
+import os, json
 from pathlib import Path
 import requests
 from dotenv import load_dotenv
@@ -14,94 +14,102 @@ CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET", "")
 USERNAME      = os.getenv("OAUTH_USERNAME", "")
 PASSWORD      = os.getenv("OAUTH_PASSWORD", "")
 
-API_ROOT  = "https://dexian.verdanadesk.com/api.php"
-V23       = f"{API_ROOT}/v2.3"
-TOKEN_URL = f"{API_ROOT}/token"
+BASE      = "https://dexian.verdanadesk.com/api.php/v2.3"
+TOKEN_URL = "https://dexian.verdanadesk.com/api.php/token"
 
 r = requests.post(TOKEN_URL, data={
     "grant_type": "password", "client_id": CLIENT_ID,
-    "client_secret": CLIENT_SECRET, "username": USERNAME,
-    "password": PASSWORD, "scope": "api",
+    "client_secret": CLIENT_SECRET,
+    "username": USERNAME, "password": PASSWORD, "scope": "api",
 }, timeout=15)
 bearer = r.json().get("access_token", "")
 H = {"Authorization": f"Bearer {bearer}", "Accept": "application/json"}
 
-# ── 1. TODOS os paths do doc.json ─────────────────────────────────────────────
-print("=== 1. TODOS os paths disponíveis na v2.3 ===")
-spec = requests.get(f"{V23}/doc.json", headers=H, timeout=15).json()
-all_paths = list(spec.get("paths", {}).keys())
-print(f"Total de paths: {len(all_paths)}\n")
-
-# Filtrar paths com palavras-chave relevantes
-keywords = ["ticket", "helpdesk", "assistance", "itil", "support", "chamado", "request", "incident"]
-print("--- Paths que contêm palavras-chave relevantes:")
-for p in all_paths:
-    if any(k in p.lower() for k in keywords):
-        print(f"  {p}")
-
-print("\n--- Todos os paths (agrupados por prefixo):")
-prefixes = {}
-for p in all_paths:
-    parts = p.strip("/").split("/")
-    prefix = parts[0] if parts else "/"
-    prefixes.setdefault(prefix, []).append(p)
-for prefix, paths in sorted(prefixes.items()):
-    print(f"\n  [{prefix}]")
-    for p in paths[:5]:  # primeiros 5 de cada grupo
-        print(f"    {p}")
-    if len(paths) > 5:
-        print(f"    ... (+{len(paths)-5} mais)")
-
-print()
-
-# ── 2. Testar os paths mais prováveis para Ticket ─────────────────────────────
-print("=== 2. Testar endpoints de Ticket ===")
-candidates = [
-    "/Helpdesk/Ticket",
-    "/Helpdesk/Tickets",
-    "/Helpdesk/ticket",
-    "/Assistance/Ticket",
-    "/Assistance/ticket",
-    "/ITIL/Ticket",
-    "/itil/ticket",
-    "/Support/Ticket",
-    "/helpdesk/Ticket",
-]
-# Adicionar qualquer path do spec que contenha "ticket"
-for p in all_paths:
-    if "ticket" in p.lower() and p not in candidates:
-        candidates.append(p)
-
-for path in candidates:
-    resp = requests.get(f"{V23}{path}", headers=H, timeout=8)
-    marker = "  *** FUNCIONOU! ***" if resp.ok else ""
+def get(url, params=None):
+    resp = requests.get(url, headers=H, params=params, timeout=15)
     try:
         body = resp.json()
-        detail = str(body)[:120]
     except Exception:
-        detail = resp.text[:120]
-    print(f"  {resp.status_code} | {path}{marker}")
-    if resp.ok:
-        print(f"    {detail}")
+        body = resp.text
+    return resp.status_code, body
+
+# ── 1. Ticket único — ver TODOS os campos ─────────────────────────────────────
+print("=== 1. Campos completos de um ticket ===")
+status, tickets = get(f"{BASE}/Assistance/Ticket", {"limit": 1})
+if isinstance(tickets, list) and tickets:
+    ticket = tickets[0]
+    print(f"Campos disponíveis ({len(ticket)} campos):")
+    for k, v in ticket.items():
+        val = str(v)[:80] if not isinstance(v, dict) else json.dumps(v)[:80]
+        print(f"  {k}: {val}")
+    first_id = ticket.get("id")
+else:
+    print(f"  {status}: {str(tickets)[:200]}")
+    first_id = None
 print()
 
-# ── 3. Testar com os headers GLPI-Profile e GLPI-Entity ───────────────────────
-print("=== 3. Testar /Helpdesk/Ticket com GLPI-Profile e GLPI-Entity ===")
-# Profile 10 = Atendimento - TI, Entity 0 = Dexian Brasil
-H_with_profile = {**H, "GLPI-Profile": "10", "GLPI-Entity": "0"}
-for path in ["/Helpdesk/Ticket", "/Ticket", "/helpdesk/ticket"]:
-    resp = requests.get(f"{V23}{path}", headers=H_with_profile, timeout=8)
-    try:
-        body = str(resp.json())[:200]
-    except Exception:
-        body = resp.text[:200]
-    print(f"  {resp.status_code} | {path} (com GLPI-Profile=10)")
-    if resp.ok:
-        print(f"    {body}")
+# ── 2. Filtro por categoria ────────────────────────────────────────────────────
+print("=== 2. Filtros por itilcategories_id ===")
+cat_id = "166"
+for f in [
+    f"itilcategories_id=={cat_id}",
+    f"itilcategories_id={cat_id}",
+    f"category=={cat_id}",
+]:
+    s, b = get(f"{BASE}/Assistance/Ticket", {"filter": f, "limit": 2})
+    count = len(b) if isinstance(b, list) else "?"
+    print(f"  filter={f!r} → {s} | {count} resultado(s)")
+    if isinstance(b, list) and b:
+        print(f"    primeiro: id={b[0].get('id')} cat={b[0].get('itilcategories_id')}")
 print()
 
-# ── 4. Mostrar prefixos únicos de top-level para referência ──────────────────
-print("=== 4. Top-level prefixos disponíveis na API ===")
-for prefix in sorted(prefixes.keys()):
-    count = len(prefixes[prefix])
-    print(f"  /{prefix}  ({count} endpoint{'s' if count>1 else ''})")
+# ── 3. Filtro por status ───────────────────────────────────────────────────────
+print("=== 3. Filtro por status ativo (status != fechado) ===")
+for f in ["status=in=(1,2,3,4)", "status!=6", "is_deleted==false"]:
+    s, b = get(f"{BASE}/Assistance/Ticket", {"filter": f, "limit": 1})
+    count = len(b) if isinstance(b, list) else "?"
+    print(f"  filter={f!r} → {s} | {count} resultado(s)")
+print()
+
+# ── 4. Paginação ──────────────────────────────────────────────────────────────
+print("=== 4. Paginação (start + limit) ===")
+s, b = get(f"{BASE}/Assistance/Ticket", {"start": 0, "limit": 3})
+print(f"  start=0 limit=3 → {s} | {len(b) if isinstance(b, list) else '?'} itens")
+
+# Cabeçalhos de paginação
+resp_full = requests.get(f"{BASE}/Assistance/Ticket", headers=H, params={"limit": 1}, timeout=15)
+print(f"  Headers de paginação:")
+for h in ["Content-Range", "X-Total-Count", "Accept-Ranges", "total-count"]:
+    print(f"    {h}: {resp_full.headers.get(h, '(ausente)')}")
+print()
+
+# ── 5. Timeline/Task de um ticket ─────────────────────────────────────────────
+if first_id:
+    print(f"=== 5. Timeline/Task do ticket #{first_id} ===")
+    s, b = get(f"{BASE}/Assistance/Ticket/{first_id}/Timeline/Task")
+    print(f"  Status: {s} | tipo: {type(b).__name__}")
+    if isinstance(b, list) and b:
+        print(f"  Primeira tarefa:")
+        for k, v in b[0].items():
+            print(f"    {k}: {str(v)[:80]}")
+    elif isinstance(b, list):
+        print("  (lista vazia)")
+    else:
+        print(f"  {str(b)[:300]}")
+    print()
+
+    # Também testar o ticket diretamente pelo ID
+    print(f"=== 6. GET /Assistance/Ticket/{first_id} ===")
+    s, b = get(f"{BASE}/Assistance/Ticket/{first_id}")
+    print(f"  Status: {s}")
+    if isinstance(b, dict):
+        for k, v in b.items():
+            print(f"  {k}: {str(v)[:80]}")
+    print()
+
+# ── 7. User lookup ────────────────────────────────────────────────────────────
+print("=== 7. Lookup de usuário via /Administration/User ===")
+s, b = get(f"{BASE}/Administration/User/Me")
+print(f"  /Administration/User/Me → {s}")
+if isinstance(b, dict):
+    print(f"  id={b.get('id')} name={b.get('name')} firstname={b.get('firstname')} realname={b.get('realname')}")
