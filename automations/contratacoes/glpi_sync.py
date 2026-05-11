@@ -637,6 +637,10 @@ class ClienteGLPI:
                     if tid is None:
                         continue
 
+                    # Ignora chamados deletados
+                    if item.get("is_deleted"):
+                        continue
+
                     # Filtro de status em Python
                     status_obj = item.get("status") or {}
                     if isinstance(status_obj, dict):
@@ -686,53 +690,44 @@ class ClienteGLPI:
 
     def buscar_data_inicio_do_conteudo(self, ticket_id: int) -> str:
         """
-        Fallback para extrair a data do SLA quando o campo 17 (time_to_resolve)
-        não é retornado pela Search API.
+        Fallback para extrair "Data de início: DD/MM/YYYY" quando sla_ttr é None.
 
-        Por que o campo 17 às vezes está vazio:
-            O GLPI só calcula e preenche time_to_resolve quando o ticket tem
-            um SLA associado via regra de negócio do GLPI (configuração de
-            SLA por categoria, urgência, etc.). Tickets criados manualmente
-            sem regra de SLA ficam com esse campo nulo. Para contornar isso,
-            o solicitante preenche uma "Data de início" no corpo do formulário
-            HTML do chamado, e este método extrai essa data com regex.
+        Busca em ordem:
+            1. Corpo do chamado (campo content do ticket)
+            2. Comentários/seguimentos: GET /Assistance/Ticket/{id}/Timeline/ITILFollowup
 
-        Por que regex em HTML bruto:
-            O corpo do ticket (campo "content") é HTML gerado pelo editor
-            visual do GLPI. Usar BeautifulSoup seria mais robusto, mas
-            adicionaria uma dependência. O regex é suficiente aqui porque
-            o padrão "Data de início: DD-MM-YYYY" tem formato previsível
-            e o campo não tem HTML complexo ao redor.
+        Regex tolera:
+            - "Data de início:" / "Data de inicio:" (acento opcional)
+            - Tags HTML e &nbsp; entre rótulo e valor
+            - DD-MM-YYYY e DD/MM/YYYY → normaliza para DD/MM/YYYY
 
-        Detalhes do padrão regex:
-            Data de in[íi]cio  → tolera com ou sem acento (normalização de
-                                  encoding às vezes remove o acento).
-            (?:<[^>]+>|&nbsp;|\\s)* → ignora tags HTML e espaços entre
-                                       o rótulo e o valor da data.
-            (\\d{2}[-/]\\d{2}[-/]\\d{4}) → captura DD-MM-YYYY ou DD/MM/YYYY.
-            .replace("-", "/")  → normaliza para DD/MM/YYYY (padrão do sistema).
-
-        Custo extra de rede:
-            Este método faz um GET /Ticket/{id} adicional por chamado sem SLA.
-            É aceitável porque a maioria dos chamados tem SLA preenchido —
-            este caminho é exceção, não regra. Se quiser otimizar no futuro:
-            pré-carregar todos os tickets em bulk com um único GET /Ticket.
-
-        Silencia exceções com pass:
-            Este método é um fallback — se falhar por qualquer motivo
-            (rede, JSON inválido, regex não bater), retorna string vazia
-            e o dashboard simplesmente exibe "—" para aquele campo.
-            Não deve parar o ciclo de sincronização.
+        Retorna "" se não encontrar em nenhuma fonte — o dashboard exibe "—".
         """
         _PADRAO = re.compile(
             r"Data de in[íi]cio:\s*(?:<[^>]+>|&nbsp;|\s)*(\d{2}[-/]\d{2}[-/]\d{4})",
             re.IGNORECASE,
         )
+
+        def _match(html: str) -> str:
+            m = _PADRAO.search(html or "")
+            return m.group(1).replace("-", "/") if m else ""
+
         try:
+            # 1. Corpo do chamado
             dados = self._get(f"{self.base_url}/Assistance/Ticket/{ticket_id}")
-            match = _PADRAO.search(dados.get("content", "") or "")
-            if match:
-                return match.group(1).replace("-", "/")
+            result = _match(dados.get("content", "") or "")
+            if result:
+                return result
+
+            # 2. Comentários (seguimentos / ITILFollowup)
+            followups = self._get(
+                f"{self.base_url}/Assistance/Ticket/{ticket_id}/Timeline/ITILFollowup"
+            )
+            if isinstance(followups, list):
+                for fu in followups:
+                    result = _match(fu.get("content", "") or "")
+                    if result:
+                        return result
         except Exception:
             pass
         return ""
