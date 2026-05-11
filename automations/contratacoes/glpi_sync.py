@@ -701,19 +701,31 @@ class ClienteGLPI:
         logger.info("Total de chamados ativos: %d", len(todos))
         return list(todos.values())
 
-    def buscar_data_inicio_nos_followups(self, ticket_id: int) -> str:
+    def buscar_data_inicio_completo(self, ticket_id: int) -> str:
         """
-        Busca "Data de início: DD/MM/YYYY" nos comentários/seguimentos do ticket.
-        Chamado apenas quando sla_ttr é None E o corpo do chamado não contém a data.
-        O corpo já foi verificado em _chamado_para_dict() sem custo extra de rede.
+        Busca "Data de início: DD/MM/YYYY" em todas as fontes disponíveis:
+            1. GET /Assistance/Ticket/{id} — conteúdo completo do ticket
+               (o endpoint de lista pode truncar o campo content)
+            2. GET /Assistance/Ticket/{id}/Timeline/ITILFollowup — comentários
+
+        Chamado apenas quando sla_ttr é None E o content em memória não bateu.
         """
         try:
+            # 1. Ticket completo (conteúdo pode ser mais longo que o retornado na lista)
+            dados = self._get(f"{self.base_url}/Assistance/Ticket/{ticket_id}")
+            result = _extrair_data_inicio(dados.get("content", "") or "")
+            if result:
+                return result
+        except Exception:
+            pass
+
+        try:
+            # 2. Comentários/seguimentos (ITILFollowup)
             followups = self._get(
                 f"{self.base_url}/Assistance/Ticket/{ticket_id}/Timeline/ITILFollowup"
             )
             if isinstance(followups, list):
                 for fu in followups:
-                    # v2.3 Timeline pode envolver o objeto sob a chave "item"
                     item_data = fu.get("item") if isinstance(fu.get("item"), dict) else fu
                     for campo in ("content", "name", "description"):
                         result = _extrair_data_inicio(item_data.get(campo, "") or "")
@@ -721,6 +733,7 @@ class ClienteGLPI:
                             return result
         except Exception:
             pass
+
         return ""
 
     def verificar_tarefa_termo(self, ticket_id: int) -> str:
@@ -993,7 +1006,7 @@ class SincronizadorDB:
         if not tempo_solucao:
             tempo_solucao = _extrair_data_inicio(chamado.get("content", "") or "")
         if not tempo_solucao:
-            tempo_solucao = self.glpi.buscar_data_inicio_nos_followups(ticket_id)
+            tempo_solucao = self.glpi.buscar_data_inicio_completo(ticket_id)
 
         # cat_id injetado por buscar_chamados_ativos; fallback para campo category
         cat_id = chamado.get("_cat_id")

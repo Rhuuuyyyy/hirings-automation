@@ -577,7 +577,10 @@
                     <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Requerente</span>
                   </th>
                   <th class="text-left px-4 py-2.5 font-medium whitespace-nowrap" style="color: var(--text-3);">
-                    <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Termo</span>
+                    <button class="sort-btn" data-sort="Termo_Status">
+                      <span class="text-[10.5px] mono uppercase tracking-[0.14em]">Termo</span>
+                      <svg class="sort-icon" fill="currentColor" viewBox="0 0 8 12"><path d="M4 0L7 4H1zM4 12L1 8h6z"/></svg>
+                    </button>
                   </th>
                   <th class="w-[1%] px-2"></th>
                 </tr>
@@ -785,16 +788,16 @@
   }
 
   const TERMO_ICON = {
-    'Termo enviado': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`,
-    'Pendente de envio': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2"/></svg>`,
-    'Sem equipamento': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14"/></svg>`,
-    'Erro ao criar tarefa': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>`,
+    'Termo OK':          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`,
+    'Pendente':          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2"/></svg>`,
+    'Sem tarefa':        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14"/></svg>`,
+    'Erro ao verificar': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>`,
   };
   const TERMO_COLOR = {
-    'Termo enviado':        'var(--ok)',
-    'Pendente de envio':    'var(--warn)',
-    'Sem equipamento':      'var(--text-4)',
-    'Erro ao criar tarefa': 'var(--err)',
+    'Termo OK':          'var(--ok)',
+    'Pendente':          '#fb923c',
+    'Sem tarefa':        'var(--text-2)',
+    'Erro ao verificar': 'var(--err)',
   };
   function termoCell(text) {
     const c = TERMO_COLOR[text] || 'var(--text-4)';
@@ -806,39 +809,52 @@
     return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  // SLA bar — extracts day count to flag rows with ≤3 days remaining
+  // SLA bar — handles DD/MM/YYYY dates by computing remaining days from today
+  function _slaLevel(text) {
+    const parsed = parseDateBR(text);
+    if (parsed) {
+      const days = Math.ceil((parsed - new Date()) / 86400000);
+      if (days < 0)  return { pct: 100, bar: 'var(--err)',  txt: 'var(--err)',    alert: 'overdue' };
+      if (days === 0)return { pct:  95, bar: 'var(--err)',  txt: 'var(--err)',    alert: 'overdue' };
+      if (days <= 3) return { pct:  75, bar: 'var(--warn)', txt: 'var(--warn)',   alert: 'soon'    };
+      if (days <= 7) return { pct:  50, bar: 'var(--info)', txt: 'var(--text)',   alert: null      };
+      return             { pct:  25, bar: 'var(--ok)',   txt: 'var(--text)',   alert: null      };
+    }
+    return null;
+  }
+
   function slaCell(text) {
     if (!text) return '<span style="color: var(--text-4);">—</span>';
     const safe = escHtml(text);
-    const t = String(text).toLowerCase();
-
-    // Try to parse day count
+    const lv = _slaLevel(text);
+    if (lv) {
+      return `<div class="flex items-center gap-2.5">
+        <div class="sla-track"><div class="sla-fill" style="width:${lv.pct}%;background:${lv.bar};"></div></div>
+        <span class="mono text-[11.5px]" style="color:${lv.txt};">${safe}</span>
+      </div>`;
+    }
+    // Legacy fallback for old text-based formats
+    const t = text.toLowerCase();
     const dayMatch = t.match(/(-?\d+)\s*dia/);
     const days = dayMatch ? parseInt(dayMatch[1], 10) : null;
     const isOverdue = t.includes('atras') || t.includes('expir') || (days !== null && days < 0);
     const isHoursOnly = !dayMatch && /\d+\s*h/.test(t);
-
-    let pct = 50, color = 'var(--text-2)', alert = false;
-    if (isOverdue)               { pct = 100; color = 'var(--err)';  alert = 'overdue'; }
-    else if (isHoursOnly)        { pct = 90;  color = 'var(--warn)'; alert = 'soon'; }
-    else if (days !== null && days <= 3) { pct = 75; color = 'var(--warn)'; alert = 'soon'; }
-    else if (days !== null && days <= 7) { pct = 50; color = 'var(--text-2)'; }
-    else if (days !== null)      { pct = 25;  color = 'var(--ok)'; }
-
-    const textColor = alert === 'overdue'
-      ? 'var(--err)'
-      : alert === 'soon'
-        ? 'var(--warn)'
-        : 'var(--text-2)';
-
+    let pct = 50, bar = 'var(--text-2)', txt = 'var(--text-2)';
+    if (isOverdue)               { pct = 100; bar = 'var(--err)';  txt = 'var(--err)';  }
+    else if (isHoursOnly)        { pct =  90; bar = 'var(--warn)'; txt = 'var(--warn)'; }
+    else if (days !== null && days <= 3) { pct = 75; bar = 'var(--warn)'; txt = 'var(--warn)'; }
+    else if (days !== null && days <= 7) { pct = 50; }
+    else if (days !== null)      { pct =  25; bar = 'var(--ok)'; }
     return `<div class="flex items-center gap-2.5">
-      <div class="sla-track"><div class="sla-fill" style="width: ${pct}%; background: ${color};"></div></div>
-      <span class="mono text-[11.5px]" style="color: ${textColor};">${safe}</span>
+      <div class="sla-track"><div class="sla-fill" style="width:${pct}%;background:${bar};"></div></div>
+      <span class="mono text-[11.5px]" style="color:${txt};">${safe}</span>
     </div>`;
   }
 
-  // Detect rows that should get the discreet row-level alert tint
+  // Row-level alert tint driven by the same date logic
   function rowAlertLevel(c) {
+    const lv = _slaLevel(c.Tempo_Solucao || '');
+    if (lv) return lv.alert;
     const t = String(c.Tempo_Solucao || '').toLowerCase();
     if (!t) return null;
     if (t.includes('atras') || t.includes('expir')) return 'overdue';
