@@ -130,6 +130,9 @@ HISTORICO_PATH = _REPO_ROOT / "database" / "historico.json"
 
 load_dotenv(_REPO_ROOT / ".env")
 
+# Instância compartilhada exposta para outros módulos (ex: usuarios_sync)
+_shared_glpi = None
+
 # ============================================================================
 # Logging
 # ============================================================================
@@ -1211,6 +1214,7 @@ def main() -> None:
         config["API_URL"], DATABASE_PATH, polling_interval, polling_interval // 60,
     )
 
+    global _shared_glpi
     glpi = ClienteGLPI(
         base_url=config["API_URL"],
         token_url=config["OAUTH_TOKEN_URL"],
@@ -1221,6 +1225,7 @@ def main() -> None:
         categoria_ids=config["CATEGORIA_IDS"],
         cats_com_ativo=config["CATS_COM_ATIVO"],
     )
+    _shared_glpi = glpi
     sync = SincronizadorDB(db_path=DATABASE_PATH, glpi=glpi)
 
     while True:

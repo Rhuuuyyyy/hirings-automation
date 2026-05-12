@@ -1700,7 +1700,7 @@
     document.getElementById('count-novo').textContent  = byStatus('Novo');
     document.getElementById('count-atend').textContent = byStatus('Em Atendimento');
     document.getElementById('count-pend').textContent  = byStatus('Pendente');
-    document.getElementById('count-termos').textContent = allChamados.filter(c => c.Termo_Status && c.Termo_Status !== 'Sem equipamento').length;
+    document.getElementById('count-termos').textContent = allChamados.filter(c => c.Termo_Status && c.Termo_Status !== 'Sem tarefa').length;
 
     if (data.ultima_atualizacao) {
       const d = new Date(data.ultima_atualizacao);
@@ -1729,7 +1729,7 @@
   function applyFilters() {
     let rows = allChamados.slice();
     if (activeStatusFilter === '__termos') {
-      rows = rows.filter(c => c.Termo_Status && c.Termo_Status !== 'Sem equipamento');
+      rows = rows.filter(c => c.Termo_Status && c.Termo_Status !== 'Sem tarefa');
     } else if (activeStatusFilter !== 'all') {
       rows = rows.filter(c => c.Status === activeStatusFilter);
     }

@@ -560,21 +560,14 @@ async def sync_analise_usuarios(background_tasks: BackgroundTasks) -> JSONRespon
 
     def _run():
         try:
-            from automations.contratacoes.glpi_sync import ClienteGLPI, carregar_configuracoes
-            config = carregar_configuracoes()
-            glpi = ClienteGLPI(
-                base_url=config["API_URL"],
-                token_url=config["OAUTH_TOKEN_URL"],
-                client_id=config["OAUTH_CLIENT_ID"],
-                client_secret=config["OAUTH_CLIENT_SECRET"],
-                username=config["OAUTH_USERNAME"],
-                password=config["OAUTH_PASSWORD"],
-                categoria_ids=config["CATEGORIA_IDS"],
-                cats_com_ativo=config["CATS_COM_ATIVO"],
-            )
+            from automations.contratacoes import glpi_sync as _gs
+            glpi = _gs._shared_glpi
+            if glpi is None:
+                logger.warning("ClienteGLPI ainda não inicializado — usuarios sync adiado.")
+                return
             usuarios_sync.executar(glpi)
-        except Exception as exc:
-            logger.error("Erro na sincronização de usuários: %s", exc)
+        except BaseException as exc:
+            logger.error("Erro na sincronização de usuários: %s", exc, exc_info=True)
 
     background_tasks.add_task(_run)
     return JSONResponse({"ok": True, "message": "Sincronização iniciada em background."})

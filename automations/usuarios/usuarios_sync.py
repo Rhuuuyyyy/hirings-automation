@@ -259,6 +259,13 @@ class AnalisadorUsuarios:
                 })
 
         # ── 2. Centro de custo divergente ─────────────────────────────────────
+        # Debug sample: log first 3 users to confirm default_entity field
+        for _dbg_uid in list(user_to_comps.keys())[:3]:
+            _dbg_u = user_map.get(_dbg_uid)
+            if _dbg_u:
+                logger.info("CC debug uid=%s default_entity=%r location=%r",
+                            _dbg_uid, _dbg_u.get("default_entity"), _dbg_u.get("location"))
+
         cc_div: list[dict] = []
         for uid, comp_ids in user_to_comps.items():
             u = user_map.get(uid)
