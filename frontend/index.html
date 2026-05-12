@@ -1497,13 +1497,13 @@
   const TERMO_ICON = {
     'Termo OK':          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`,
     'Pendente':          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2"/></svg>`,
-    'Sem tarefa':        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14"/></svg>`,
+    'Sem equipamento':        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14"/></svg>`,
     'Erro ao verificar': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>`,
   };
   const TERMO_COLOR = {
     'Termo OK':          'var(--ok)',
     'Pendente':          '#fb923c',
-    'Sem tarefa':        'var(--text-2)',
+    'Sem equipamento':        'var(--text-2)',
     'Erro ao verificar': 'var(--err)',
   };
   function termoCell(text) {
@@ -1700,7 +1700,7 @@
     document.getElementById('count-novo').textContent  = byStatus('Novo');
     document.getElementById('count-atend').textContent = byStatus('Em Atendimento');
     document.getElementById('count-pend').textContent  = byStatus('Pendente');
-    document.getElementById('count-termos').textContent = allChamados.filter(c => c.Termo_Status && c.Termo_Status !== 'Sem tarefa').length;
+    document.getElementById('count-termos').textContent = allChamados.filter(c => c.Termo_Status && c.Termo_Status !== 'Sem equipamento').length;
 
     if (data.ultima_atualizacao) {
       const d = new Date(data.ultima_atualizacao);
@@ -1729,7 +1729,7 @@
   function applyFilters() {
     let rows = allChamados.slice();
     if (activeStatusFilter === '__termos') {
-      rows = rows.filter(c => c.Termo_Status && c.Termo_Status !== 'Sem tarefa');
+      rows = rows.filter(c => c.Termo_Status && c.Termo_Status !== 'Sem equipamento');
     } else if (activeStatusFilter !== 'all') {
       rows = rows.filter(c => c.Status === activeStatusFilter);
     }
