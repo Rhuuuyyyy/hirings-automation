@@ -164,6 +164,14 @@ class AnalisadorUsuarios:
         logger.info("Usuários obtidos: %d | Computadores: %d",
                     len(usuarios_raw), len(computadores_raw))
 
+        # Log de diagnóstico: mostra os primeiros 3 usuários com ambos os campos
+        for u in usuarios_raw[:3]:
+            logger.info(
+                "[DIAG] user=%s | location=%s | default_entity=%s",
+                u.get("username") or u.get("login") or u.get("id"),
+                u.get("location"),
+                u.get("default_entity"),
+            )
 
         # Mapas em memória
         user_map: dict[int, dict] = {}
