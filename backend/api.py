@@ -5,28 +5,16 @@ backend/api.py — Rotas da API REST do Hub de Automações.
 import csv
 import io
 import json
-import logging
-import os
-import threading
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _DB_CONTRATACOES = Path("database/contratacoes.json")
 _DB_HISTORICO    = Path("database/historico.json")
-_DB_USUARIOS     = Path("database/usuarios_analise.json")
-
-_VAZIO_USUARIOS = json.dumps({
-    "ultima_atualizacao": None,
-    "inativos-maquinas":  [],
-    "cc-divergente":      [],
-    "multi-responsaveis": [],
-}, ensure_ascii=False)
 
 _VAZIO = json.dumps(
     {"ultima_atualizacao": None, "total": 0, "chamados": []},
@@ -531,56 +519,3 @@ def _export_pdf(chamados: list[dict], ultima_atualizacao: str | None) -> Streami
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="contratacoes_{ts}.pdf"'},
     )
-
-
-# ── Análise de Usuários ───────────────────────────────────────────────────────
-
-@router.get("/analise-usuarios", summary="Retorna os dados das 3 análises de inventário")
-async def get_analise_usuarios() -> Response:
-    if not _DB_USUARIOS.exists():
-        return Response(content=_VAZIO_USUARIOS, media_type="application/json")
-    try:
-        return Response(
-            content=_DB_USUARIOS.read_text(encoding="utf-8"),
-            media_type="application/json",
-        )
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={"erro": str(exc)})
-
-
-@router.post("/analise-usuarios/sync", summary="Dispara nova varredura de usuários × máquinas")
-async def sync_analise_usuarios(background_tasks: BackgroundTasks) -> JSONResponse:
-    from automations.usuarios import usuarios_sync
-
-    if usuarios_sync.is_running():
-        return JSONResponse(
-            status_code=409,
-            content={"ok": False, "message": "Sincronização já em andamento."},
-        )
-
-    def _run():
-        try:
-            from automations.contratacoes.glpi_sync import ClienteGLPI, carregar_configuracoes
-            config = carregar_configuracoes()
-            glpi = ClienteGLPI(
-                base_url=config["API_URL"],
-                token_url=config["OAUTH_TOKEN_URL"],
-                client_id=config["OAUTH_CLIENT_ID"],
-                client_secret=config["OAUTH_CLIENT_SECRET"],
-                username=config["OAUTH_USERNAME"],
-                password=config["OAUTH_PASSWORD"],
-                categoria_ids=config["CATEGORIA_IDS"],
-                cats_com_ativo=config["CATS_COM_ATIVO"],
-            )
-            usuarios_sync.executar(glpi)
-        except BaseException as exc:
-            logger.error("Erro na sincronização de usuários: %s", exc, exc_info=True)
-
-    background_tasks.add_task(_run)
-    return JSONResponse({"ok": True, "message": "Sincronização iniciada em background."})
-
-
-@router.get("/analise-usuarios/status", summary="Verifica se a sincronização está em andamento")
-async def status_sync_usuarios() -> JSONResponse:
-    from automations.usuarios import usuarios_sync
-    return JSONResponse({"running": usuarios_sync.is_running()})

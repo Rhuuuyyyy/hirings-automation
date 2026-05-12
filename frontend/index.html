@@ -136,22 +136,14 @@
     .ivl-trigger:hover, .ivl-wrap.open .ivl-trigger {
       color: var(--text-2); border-color: var(--line-2); background: var(--surface-2);
     }
-    .ivl-chevron {
-      width: 9px; height: 9px; flex-shrink: 0;
-      transition: transform 0.15s ease;
-      opacity: 0.5;
-    }
+    .ivl-chevron { width: 9px; height: 9px; flex-shrink: 0; transition: transform 0.15s ease; opacity: 0.5; }
     .ivl-wrap.open .ivl-chevron { transform: rotate(180deg); opacity: 1; }
     .ivl-menu {
       display: none;
       position: absolute; right: 0; bottom: calc(100% + 5px);
-      background: var(--surface-2);
-      border: 1px solid var(--line-2);
-      border-radius: 7px;
-      padding: 4px;
-      min-width: 88px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-      z-index: 200;
+      background: var(--surface-2); border: 1px solid var(--line-2);
+      border-radius: 7px; padding: 4px; min-width: 88px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35); z-index: 200;
     }
     .ivl-wrap.open .ivl-menu { display: flex; flex-direction: column; gap: 1px; }
     .ivl-opt {
@@ -164,11 +156,7 @@
     }
     .ivl-opt:hover { background: var(--line); color: var(--text); }
     .ivl-opt.active { color: var(--accent); }
-    .ivl-opt.active::after {
-      content: '';
-      width: 5px; height: 5px; border-radius: 50%;
-      background: var(--accent); flex-shrink: 0;
-    }
+    .ivl-opt.active::after { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
 
     /* Spinner */
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -611,7 +599,7 @@
           </div>
           <span id="sync-label" class="text-[11.5px]" style="color: var(--text-2);">Aguardando…</span>
         </div>
-        <div class="flex items-center gap-1.5" style="color: var(--text-4);">
+        <div class="flex items-center gap-1" style="color: var(--text-4);">
           <span id="sync-count" class="mono text-[10.5px]"></span>
           <div class="ivl-wrap" id="ivl-wrap" title="Intervalo de atualização">
             <button class="ivl-trigger" id="ivl-trigger" onclick="toggleIvlMenu(event)">
@@ -931,11 +919,11 @@
               class="bg-transparent outline-none text-[12.5px] flex-1 placeholder:text-[var(--text-4)]" style="color: var(--text);"/>
           </div>
           <div class="flex-1"></div>
-          <button id="usr-sync-btn" onclick="triggerUsrSync()" class="ml-1 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border hairline-2 text-[12px] transition-colors hover:border-[var(--line-2)] hover:text-[var(--text)]" style="background: var(--surface); color: var(--text-2);" title="Atualizar análise">
+          <button class="ml-1 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border hairline-2 text-[12px] transition-colors hover:border-[var(--line-2)] hover:text-[var(--text)]" style="background: var(--surface); color: var(--text-2);" title="Atualizar análise">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
             </svg>
-            <span id="usr-sync-label">Sync</span>
+            <span>Sync</span>
           </button>
           <button class="ml-1 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border hairline-2 text-[12px] transition-colors hover:border-[var(--line-2)] hover:text-[var(--text)]" style="background: var(--surface); color: var(--text-2);" title="Exportar">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
@@ -1216,7 +1204,6 @@
         nav.style.background = 'transparent';
       }
     });
-    if (page === 'analise-usuarios' && !_usrDataLoaded) fetchAnaliseUsuarios();
   }
   showPage('contratacoes');
 
@@ -1497,13 +1484,13 @@
   const TERMO_ICON = {
     'Termo OK':          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`,
     'Pendente':          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2"/></svg>`,
-    'Sem equipamento':        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14"/></svg>`,
+    'Sem tarefa':        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14"/></svg>`,
     'Erro ao verificar': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>`,
   };
   const TERMO_COLOR = {
     'Termo OK':          'var(--ok)',
     'Pendente':          '#fb923c',
-    'Sem equipamento':        'var(--text-2)',
+    'Sem tarefa':        'var(--text-2)',
     'Erro ao verificar': 'var(--err)',
   };
   function termoCell(text) {
@@ -1589,24 +1576,38 @@
     } catch (e) {}
   }
 
+  function setIvlActive(val) {
+    const v = parseInt(val);
+    document.querySelectorAll('.ivl-opt').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.dataset.val) === v);
+    });
+    const labels = { 10: '10s', 30: '30s', 60: '1 min', 120: '2 min', 300: '5 min' };
+    const lbl = document.getElementById('ivl-label');
+    if (lbl) lbl.textContent = labels[v] || v + 's';
+  }
+
   function toggleIvlMenu(e) {
     e.stopPropagation();
     document.getElementById('ivl-wrap').classList.toggle('open');
   }
 
-  function setIvlActive() {
-    const labels = { 10: '10s', 30: '30s', 60: '1m', 120: '2m', 300: '5m' };
-    document.getElementById('ivl-label').textContent = labels[syncInterval] || `${syncInterval}s`;
-    document.querySelectorAll('.ivl-opt').forEach(b => {
-      b.classList.toggle('active', parseInt(b.dataset.val) === syncInterval);
+  document.addEventListener('click', () => {
+    const w = document.getElementById('ivl-wrap');
+    if (w) w.classList.remove('open');
+  });
+
+  document.querySelectorAll('.ivl-opt').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      onIntervalChange(btn.dataset.val);
+      document.getElementById('ivl-wrap').classList.remove('open');
     });
-  }
+  });
 
   function onIntervalChange(val) {
     syncInterval = parseInt(val);
     try { localStorage.setItem('hub-sync-interval', syncInterval); } catch (e) {}
-    document.getElementById('ivl-wrap').classList.remove('open');
-    setIvlActive();
+    setIvlActive(syncInterval);
     clearInterval(countdownTimer);
     fetchContratacoes();
   }
@@ -1694,7 +1695,7 @@
     const byStatus = (s) => allChamados.filter(c => c.Status === s).length;
     document.getElementById('stat-atend').textContent = byStatus('Em Atendimento');
     document.getElementById('stat-pend').textContent  = byStatus('Pendente');
-    document.getElementById('stat-termo').textContent = allChamados.filter(c => c.Termo_Status === 'Termo OK').length;
+    document.getElementById('stat-termo').textContent = allChamados.filter(c => c.Termo_Status === 'Termo enviado').length;
 
     document.getElementById('count-all').textContent   = total;
     document.getElementById('count-novo').textContent  = byStatus('Novo');
@@ -1998,69 +1999,10 @@
   });
 
   // ═══════════════════════════════════════════════════════
-  // Análise de Usuários — integração com backend
-  // ═══════════════════════════════════════════════════════
-  let _usrDataLoaded = false;
-  let _usrSyncPoller = null;
-
-  async function fetchAnaliseUsuarios() {
-    try {
-      const res = await fetch('/api/analise-usuarios');
-      if (!res.ok) return;
-      const data = await res.json();
-      ['inativos-maquinas', 'cc-divergente', 'multi-responsaveis'].forEach(key => {
-        window.HUB.setAnalysisData(key, data[key] || []);
-      });
-      const ts = data.ultima_atualizacao
-        ? new Date(data.ultima_atualizacao).toLocaleString('pt-BR')
-        : 'nunca';
-      const el = document.getElementById('usr-last-sync');
-      if (el) el.textContent = `última varredura: ${ts}`;
-      _usrDataLoaded = true;
-    } catch (e) { console.error('fetchAnaliseUsuarios:', e); }
-  }
-
-  async function triggerUsrSync() {
-    const btn = document.getElementById('usr-sync-btn');
-    const lbl = document.getElementById('usr-sync-label');
-    if (!btn || !lbl) return;
-    btn.disabled = true;
-    lbl.textContent = 'Sincronizando…';
-    try {
-      await fetch('/api/analise-usuarios/sync', { method: 'POST' });
-      if (_usrSyncPoller) clearInterval(_usrSyncPoller);
-      _usrSyncPoller = setInterval(async () => {
-        try {
-          const st = await (await fetch('/api/analise-usuarios/status')).json();
-          if (!st.running) {
-            clearInterval(_usrSyncPoller);
-            _usrSyncPoller = null;
-            btn.disabled = false;
-            lbl.textContent = 'Sync';
-            await fetchAnaliseUsuarios();
-          }
-        } catch (_) {}
-      }, 2000);
-    } catch (e) {
-      btn.disabled = false;
-      lbl.textContent = 'Sync';
-      console.error('triggerUsrSync:', e);
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════
   // Init
   // ═══════════════════════════════════════════════════════
   loadSyncInterval();
-  document.querySelectorAll('.ivl-opt').forEach(b => {
-    b.addEventListener('click', () => onIntervalChange(b.dataset.val));
-  });
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('#ivl-wrap')) {
-      document.getElementById('ivl-wrap')?.classList.remove('open');
-    }
-  });
-  setIvlActive();
+  setIvlActive(syncInterval);
   fetchContratacoes();
 </script>
 </body>
