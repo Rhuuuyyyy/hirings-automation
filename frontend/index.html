@@ -119,22 +119,56 @@
       animation: shrink var(--sync-dur, 10s) linear forwards;
     }
 
-    /* Interval buttons */
-    .interval-btn {
+    /* Interval dropdown */
+    .ivl-wrap { position: relative; }
+    .ivl-trigger {
+      display: flex; align-items: center; gap: 4px;
       font-family: 'Geist Mono', ui-monospace, monospace;
-      font-size: 10px;
-      color: var(--text-3);
+      font-size: 10.5px; color: var(--text-3);
       background: transparent;
-      border: 1px solid transparent;
-      border-radius: 4px;
-      padding: 2px 6px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      padding: 2px 7px 2px 8px;
       cursor: pointer;
       transition: color 0.12s, border-color 0.12s, background 0.12s;
-      line-height: 1.5;
-      letter-spacing: 0.02em;
+      white-space: nowrap;
     }
-    .interval-btn:hover { color: var(--text-2); border-color: var(--line-2); }
-    .interval-btn.active { color: var(--text); border-color: var(--line-2); background: var(--surface-2); }
+    .ivl-trigger:hover, .ivl-wrap.open .ivl-trigger {
+      color: var(--text-2); border-color: var(--line-2); background: var(--surface-2);
+    }
+    .ivl-chevron {
+      width: 9px; height: 9px; flex-shrink: 0;
+      transition: transform 0.15s ease;
+      opacity: 0.5;
+    }
+    .ivl-wrap.open .ivl-chevron { transform: rotate(180deg); opacity: 1; }
+    .ivl-menu {
+      display: none;
+      position: absolute; right: 0; bottom: calc(100% + 5px);
+      background: var(--surface-2);
+      border: 1px solid var(--line-2);
+      border-radius: 7px;
+      padding: 4px;
+      min-width: 88px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+      z-index: 200;
+    }
+    .ivl-wrap.open .ivl-menu { display: flex; flex-direction: column; gap: 1px; }
+    .ivl-opt {
+      font-family: 'Geist Mono', ui-monospace, monospace;
+      font-size: 10.5px; color: var(--text-2);
+      background: transparent; border: none; border-radius: 4px;
+      padding: 5px 9px; cursor: pointer; text-align: left;
+      transition: background 0.1s, color 0.1s;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .ivl-opt:hover { background: var(--line); color: var(--text); }
+    .ivl-opt.active { color: var(--accent); }
+    .ivl-opt.active::after {
+      content: '';
+      width: 5px; height: 5px; border-radius: 50%;
+      background: var(--accent); flex-shrink: 0;
+    }
 
     /* Spinner */
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -579,12 +613,20 @@
         </div>
         <div class="flex items-center gap-1.5" style="color: var(--text-4);">
           <span id="sync-count" class="mono text-[10.5px]"></span>
-          <div class="flex items-center gap-0.5" id="interval-btns" title="Intervalo de atualização">
-            <button class="interval-btn" data-val="10">10s</button>
-            <button class="interval-btn" data-val="30">30s</button>
-            <button class="interval-btn" data-val="60">1m</button>
-            <button class="interval-btn" data-val="120">2m</button>
-            <button class="interval-btn" data-val="300">5m</button>
+          <div class="ivl-wrap" id="ivl-wrap" title="Intervalo de atualização">
+            <button class="ivl-trigger" id="ivl-trigger" onclick="toggleIvlMenu(event)">
+              <span id="ivl-label">10s</span>
+              <svg class="ivl-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </button>
+            <div class="ivl-menu" id="ivl-menu">
+              <button class="ivl-opt" data-val="10">10 s</button>
+              <button class="ivl-opt" data-val="30">30 s</button>
+              <button class="ivl-opt" data-val="60">1 min</button>
+              <button class="ivl-opt" data-val="120">2 min</button>
+              <button class="ivl-opt" data-val="300">5 min</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1547,12 +1589,24 @@
     } catch (e) {}
   }
 
+  function toggleIvlMenu(e) {
+    e.stopPropagation();
+    document.getElementById('ivl-wrap').classList.toggle('open');
+  }
+
+  function setIvlActive() {
+    const labels = { 10: '10s', 30: '30s', 60: '1m', 120: '2m', 300: '5m' };
+    document.getElementById('ivl-label').textContent = labels[syncInterval] || `${syncInterval}s`;
+    document.querySelectorAll('.ivl-opt').forEach(b => {
+      b.classList.toggle('active', parseInt(b.dataset.val) === syncInterval);
+    });
+  }
+
   function onIntervalChange(val) {
     syncInterval = parseInt(val);
     try { localStorage.setItem('hub-sync-interval', syncInterval); } catch (e) {}
-    document.querySelectorAll('.interval-btn').forEach(b => {
-      b.classList.toggle('active', parseInt(b.dataset.val) === syncInterval);
-    });
+    document.getElementById('ivl-wrap').classList.remove('open');
+    setIvlActive();
     clearInterval(countdownTimer);
     fetchContratacoes();
   }
@@ -1998,10 +2052,15 @@
   // Init
   // ═══════════════════════════════════════════════════════
   loadSyncInterval();
-  document.querySelectorAll('.interval-btn').forEach(b => {
+  document.querySelectorAll('.ivl-opt').forEach(b => {
     b.addEventListener('click', () => onIntervalChange(b.dataset.val));
-    b.classList.toggle('active', parseInt(b.dataset.val) === syncInterval);
   });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#ivl-wrap')) {
+      document.getElementById('ivl-wrap')?.classList.remove('open');
+    }
+  });
+  setIvlActive();
   fetchContratacoes();
 </script>
 </body>

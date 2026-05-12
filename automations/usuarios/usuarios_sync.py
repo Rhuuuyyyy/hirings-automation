@@ -93,6 +93,19 @@ def _user_entity(u: dict, entity_name_map: dict) -> tuple[str | None, str | None
     return None, None
 
 
+def _extract_comp_entity(comp: dict) -> tuple[str | None, str | None]:
+    """Retorna (entity_id, entity_name) do campo entity do computador."""
+    raw = comp.get("entity")
+    if raw is None:
+        return None, None
+    if isinstance(raw, dict):
+        fid = raw.get("id")
+        fname = raw.get("completename") or raw.get("name") or ""
+        if fid:
+            return str(fid), fname
+    return None, None
+
+
 def _extract_cc(obj: dict) -> tuple[str | None, str | None]:
     """
     Retorna (cc_id, cc_name) do campo de localização/centro de custo.
@@ -258,7 +271,7 @@ class AnalisadorUsuarios:
                 comp = comp_map.get(cid)
                 if not comp:
                     continue
-                mcc_id, mcc_name = _extract_cc(comp)
+                mcc_id, mcc_name = _extract_comp_entity(comp)
                 if not mcc_id or mcc_id == ucc_id:
                     continue
                 cc_div.append({
