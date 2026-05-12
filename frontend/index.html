@@ -119,21 +119,22 @@
       animation: shrink var(--sync-dur, 10s) linear forwards;
     }
 
-    /* Interval select */
-    .interval-select {
-      background: transparent;
-      border: none;
-      outline: none;
+    /* Interval buttons */
+    .interval-btn {
       font-family: 'Geist Mono', ui-monospace, monospace;
-      font-size: 10.5px;
+      font-size: 10px;
       color: var(--text-3);
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      padding: 2px 6px;
       cursor: pointer;
-      padding: 0;
-      appearance: none;
-      -webkit-appearance: none;
+      transition: color 0.12s, border-color 0.12s, background 0.12s;
+      line-height: 1.5;
+      letter-spacing: 0.02em;
     }
-    .interval-select:hover { color: var(--text-2); }
-    .interval-select option { background: var(--surface); color: var(--text); }
+    .interval-btn:hover { color: var(--text-2); border-color: var(--line-2); }
+    .interval-btn.active { color: var(--text); border-color: var(--line-2); background: var(--surface-2); }
 
     /* Spinner */
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -576,15 +577,15 @@
           </div>
           <span id="sync-label" class="text-[11.5px]" style="color: var(--text-2);">Aguardando…</span>
         </div>
-        <div class="flex items-center gap-1" style="color: var(--text-4);">
+        <div class="flex items-center gap-1.5" style="color: var(--text-4);">
           <span id="sync-count" class="mono text-[10.5px]"></span>
-          <select id="interval-select" class="interval-select" onchange="onIntervalChange(this.value)" title="Intervalo de atualização">
-            <option value="10">10s</option>
-            <option value="30">30s</option>
-            <option value="60">1 min</option>
-            <option value="120">2 min</option>
-            <option value="300">5 min</option>
-          </select>
+          <div class="flex items-center gap-0.5" id="interval-btns" title="Intervalo de atualização">
+            <button class="interval-btn" data-val="10">10s</button>
+            <button class="interval-btn" data-val="30">30s</button>
+            <button class="interval-btn" data-val="60">1m</button>
+            <button class="interval-btn" data-val="120">2m</button>
+            <button class="interval-btn" data-val="300">5m</button>
+          </div>
         </div>
       </div>
       <div class="h-[2px] rounded-full overflow-hidden" style="background: var(--line);">
@@ -1549,6 +1550,9 @@
   function onIntervalChange(val) {
     syncInterval = parseInt(val);
     try { localStorage.setItem('hub-sync-interval', syncInterval); } catch (e) {}
+    document.querySelectorAll('.interval-btn').forEach(b => {
+      b.classList.toggle('active', parseInt(b.dataset.val) === syncInterval);
+    });
     clearInterval(countdownTimer);
     fetchContratacoes();
   }
@@ -1636,7 +1640,7 @@
     const byStatus = (s) => allChamados.filter(c => c.Status === s).length;
     document.getElementById('stat-atend').textContent = byStatus('Em Atendimento');
     document.getElementById('stat-pend').textContent  = byStatus('Pendente');
-    document.getElementById('stat-termo').textContent = allChamados.filter(c => c.Termo_Status === 'Termo enviado').length;
+    document.getElementById('stat-termo').textContent = allChamados.filter(c => c.Termo_Status === 'Termo OK').length;
 
     document.getElementById('count-all').textContent   = total;
     document.getElementById('count-novo').textContent  = byStatus('Novo');
@@ -1994,7 +1998,10 @@
   // Init
   // ═══════════════════════════════════════════════════════
   loadSyncInterval();
-  document.getElementById('interval-select').value = syncInterval;
+  document.querySelectorAll('.interval-btn').forEach(b => {
+    b.addEventListener('click', () => onIntervalChange(b.dataset.val));
+    b.classList.toggle('active', parseInt(b.dataset.val) === syncInterval);
+  });
   fetchContratacoes();
 </script>
 </body>

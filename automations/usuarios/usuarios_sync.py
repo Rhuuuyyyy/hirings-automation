@@ -72,6 +72,27 @@ def _extract_id(obj_or_id: Any) -> int | None:
     except (ValueError, TypeError):
         return None
 
+def _user_entity(u: dict, entity_name_map: dict) -> tuple[str | None, str | None]:
+    """Retorna (entity_id, entity_name) da entidade padrão do usuário (default_entity)."""
+    raw = u.get("default_entity")
+    if raw is None:
+        return None, None
+    if isinstance(raw, dict):
+        fid = raw.get("id")
+        if fid:
+            eid = int(fid)
+            fname = raw.get("completename") or raw.get("name") or entity_name_map.get(eid, "")
+            return str(eid), fname
+    else:
+        try:
+            eid = int(raw)
+            if eid:
+                return str(eid), entity_name_map.get(eid, "")
+        except (ValueError, TypeError):
+            pass
+    return None, None
+
+
 def _extract_cc(obj: dict) -> tuple[str | None, str | None]:
     """
     Retorna (cc_id, cc_name) do campo de localização/centro de custo.
@@ -179,6 +200,15 @@ class AnalisadorUsuarios:
             if cid:
                 comp_map[cid] = c
 
+        # Mapa de entidades a partir dos computadores (entity tem nome completo)
+        entity_name_map: dict[int, str] = {}
+        for c in comp_map.values():
+            ent = c.get("entity")
+            if isinstance(ent, dict):
+                eid = _extract_id(ent)
+                if eid and not entity_name_map.get(eid):
+                    entity_name_map[eid] = ent.get("completename") or ent.get("name") or ""
+
         # Relacionamentos: user_id → [comp_ids] e comp_id → [user_ids]
         user_to_comps: dict[int, list[int]] = {}
         comp_to_users: dict[int, list[int]] = {}
@@ -204,7 +234,7 @@ class AnalisadorUsuarios:
                 comp = comp_map.get(cid)
                 if not comp:
                     continue
-                _, cc_name = _extract_cc(u)
+                _, ent_name = _user_entity(u, entity_name_map)
                 inativos.append({
                     "user":       _user_name(u),
                     "userId":     str(uid),
@@ -212,7 +242,7 @@ class AnalisadorUsuarios:
                     "machine":    comp.get("name") or f"Computer #{cid}",
                     "machineId":  str(cid),
                     "machineUrl": _computer_url(cid),
-                    "dept":       cc_name or "",
+                    "dept":       ent_name or "",
                 })
 
         # ── 2. Centro de custo divergente ─────────────────────────────────────
@@ -221,7 +251,7 @@ class AnalisadorUsuarios:
             u = user_map.get(uid)
             if not u:
                 continue
-            ucc_id, ucc_name = _extract_cc(u)
+            ucc_id, ucc_name = _user_entity(u, entity_name_map)
             if not ucc_id:
                 continue
             for cid in comp_ids:
