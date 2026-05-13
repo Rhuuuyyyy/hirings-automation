@@ -234,8 +234,8 @@ cp .env.example .env
 
 ```bash
 # Clone o repositório
-git clone https://github.com/Rhuuuyyyy/hirings-automation.git
-cd hirings-automation
+git clone https://github.com/Rhuuuyyyy/hub-automation.git
+cd hub-automation
 
 # Crie e ative o ambiente virtual
 python -m venv .venv
@@ -264,7 +264,7 @@ Para encerrar: `Ctrl+C`.
 ## Estrutura do Repositório
 
 ```
-hirings-automation/
+hub-automation/
 │
 ├── run.py                          ponto de entrada único
 ├── main.py                         aplicação FastAPI
