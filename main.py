@@ -22,7 +22,6 @@ app = FastAPI(
     title="Hub de Automações",
     description="Dashboard centralizado de automações internas.",
     version="1.0.0",
-    root_path=_BASE,
 )
 
 app.include_router(router, prefix=f"{_BASE}/api")
