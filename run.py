@@ -35,6 +35,6 @@ sync_thread.start()
 print("[run] Worker GLPI iniciado em background.")
 
 # ── 4. Servidor web (bloqueia até Ctrl+C) ────────────────────────────────────
-print("[run] Dashboard disponível em → http://localhost:8000")
+print("[run] Dashboard disponível em → http://localhost:8000/hub/automacoes")
 print("[run] Pressione Ctrl+C para encerrar.\n")
 uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

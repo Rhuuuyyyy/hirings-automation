@@ -16,15 +16,19 @@ from fastapi.responses import FileResponse
 
 from backend.api import router
 
+_BASE = "/hub/automacoes"
+
 app = FastAPI(
     title="Hub de Automações",
     description="Dashboard centralizado de automações internas.",
     version="1.0.0",
+    root_path=_BASE,
 )
 
-app.include_router(router, prefix="/api")
+app.include_router(router, prefix=f"{_BASE}/api")
 
 
-@app.get("/", include_in_schema=False)
+@app.get(_BASE, include_in_schema=False)
+@app.get(f"{_BASE}/", include_in_schema=False)
 async def dashboard() -> FileResponse:
     return FileResponse("frontend/index.html")
