@@ -1,28 +1,51 @@
 <div align="center">
 
-# Hub de Automações TI — Dexian
+<br>
 
-**Plataforma centralizada de monitoramento e automação de processos operacionais de TI**
+# Hub de Automações TI
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.111%2B-009688?style=flat-square&logo=fastapi&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-CDN-38BDF8?style=flat-square&logo=tailwindcss&logoColor=white)
-![Verdanadesk](https://img.shields.io/badge/Verdanadesk-REST%20API%20v2.3-FF7A1A?style=flat-square)
-![Uso Interno](https://img.shields.io/badge/uso-interno%20Dexian-6366F1?style=flat-square)
+### Plataforma interna de monitoramento e automação de processos de TI
+
+<br>
+
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.111%2B-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Verdanadesk](https://img.shields.io/badge/Verdanadesk-API%20v2.3-FF7A1A?style=flat-square)](https://verdanadesk.com)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-CDN-38BDF8?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![Licença](https://img.shields.io/badge/uso-interno%20Dexian-6366F1?style=flat-square)]()
+
+<br>
 
 </div>
 
 ---
 
+## Sumário
+
+- [Visão Geral](#visão-geral)
+- [Módulos](#módulos)
+- [Dashboard](#dashboard)
+- [Exportação](#exportação)
+- [Stack](#stack)
+- [Arquitetura](#arquitetura)
+- [Configuração](#configuração)
+- [Como Executar](#como-executar)
+- [Estrutura do Repositório](#estrutura-do-repositório)
+- [Adicionando um Módulo](#adicionando-um-módulo)
+- [Histórico de Versões](#histórico-de-versões)
+- [Roadmap](#roadmap)
+
+---
+
 ## Visão Geral
 
-O Hub de Automações centraliza o acompanhamento de processos operacionais de TI que antes dependiam de trabalho manual. O núcleo do sistema é um worker de sincronização que conversa com a API REST do Verdanadesk (GLPI), persiste os dados localmente e os expõe via uma API FastAPI para um dashboard web em tempo real.
+O Hub de Automações centraliza o acompanhamento de processos operacionais de TI que antes dependiam inteiramente de trabalho manual. O núcleo do sistema é um worker de sincronização que consome a API REST do Verdanadesk, persiste os dados localmente em JSON e os expõe para um dashboard web em tempo real via FastAPI.
 
-A arquitetura é modular por design. O módulo de Contratações foi o ponto de partida; o módulo de Análise de Usuários veio na sequência. Adicionar um novo módulo significa criar um worker em `automations/`, registrar rotas em `backend/api.py` e incluir a entrada no menu lateral do `frontend/index.html` — sem tocar na base da aplicação.
+A arquitetura é modular por design: adicionar um novo módulo significa criar um worker em `automations/`, registrar rotas em `backend/api.py` e incluir a entrada no menu lateral do frontend — sem tocar na base da aplicação.
 
 ```
-Hoje:   Contratações GLPI  ·  Análise de Usuários/Máquinas
-Amanhã: + Termos de Responsabilidade  ·  + Onboarding  ·  + Alertas de SLA
+Hoje:   Contratações GLPI  ·  Análise de Usuários e Máquinas
+Amanhã: Termos de Responsabilidade  ·  Onboarding  ·  Alertas de SLA
 ```
 
 ---
@@ -31,38 +54,36 @@ Amanhã: + Termos de Responsabilidade  ·  + Onboarding  ·  + Alertas de SLA
 
 ### Contratações GLPI
 
-Monitora chamados de contratação abertos no Verdanadesk. O worker roda continuamente em background e a cada ciclo:
+Monitora chamados de contratação abertos no Verdanadesk. O worker executa continuamente em background e a cada ciclo:
 
-1. Autentica via OAuth2 Password Grant e gerencia o token com auto-renewal transparente.
-2. Consulta as categorias configuradas com busca paginada.
-3. Filtra chamados com status ativo (Novo, Em Atendimento, Pendente).
-4. Para chamados da categoria com controle de ativo, verifica — em **somente leitura** — se existe uma tarefa de Termo de Responsabilidade associada.
-5. Persiste o snapshot via escrita atômica (`arquivo.tmp → os.replace`).
+1. Autentica via OAuth2 Password Grant com auto-renewal transparente de token
+2. Consulta as categorias configuradas com paginação automática
+3. Filtra chamados com status ativo — Novo, Em Atendimento, Pendente
+4. Para chamados da categoria com controle de ativo, verifica em **somente leitura** se existe uma tarefa de Termo de Responsabilidade associada
+5. Persiste o snapshot via escrita atômica (`arquivo.tmp` → `os.replace`)
 
-O dashboard consome esse snapshot via polling, sem WebSocket.
+O dashboard consome esse snapshot via polling leve, sem WebSocket.
 
-#### Gestão de Termos de Responsabilidade
+#### Status do Termo de Responsabilidade
 
-Para chamados da categoria configurada em `CATEGORIA_CONTRATACAO_ID_WITH_ASSETS`, o sistema inspeciona automaticamente as tarefas vinculadas ao ticket:
-
-| `Termo_Status`      | Condição                                                    |
-|---------------------|-------------------------------------------------------------|
-| `Termo OK`          | Tarefa de termo encontrada e concluída (`state = 2`)        |
-| `Pendente`          | Tarefa encontrada, mas ainda em aberto                      |
-| `Sem tarefa`        | Nenhuma tarefa de termo localizada no ticket                |
-| `Erro ao verificar` | Falha de comunicação com a API durante a verificação        |
+| `Termo_Status` | Condição |
+|---|---|
+| `Termo OK` | Tarefa de termo encontrada e concluída (`state = 2`) |
+| `Pendente` | Tarefa encontrada, mas ainda em aberto |
+| `Sem tarefa` | Nenhuma tarefa de termo localizada no ticket |
+| `Erro ao verificar` | Falha de comunicação com a API durante a verificação |
 
 ---
 
 ### Análise de Usuários
 
-Varredura periódica do inventário para identificar anomalias entre usuários e máquinas cadastradas no Verdanadesk. Produz três relatórios:
+Varredura do inventário para identificar anomalias entre usuários e máquinas cadastradas. Produz três relatórios:
 
-| Análise                    | Descrição                                                                                      |
-|----------------------------|------------------------------------------------------------------------------------------------|
-| **Inativos com Máquinas**  | Usuários com `is_active = false` que ainda possuem computadores vinculados                     |
-| **CC Divergente**          | Usuário e máquina com centros de custo diferentes — compara `default_entity` do usuário com `entity` do computador |
-| **Múltiplos Responsáveis** | Computadores com mais de um usuário atribuído (`user` e `user_tech` distintos)                 |
+| Análise | Descrição |
+|---|---|
+| **Inativos com Máquinas** | Usuários com `is_active = false` que ainda possuem computadores vinculados |
+| **CC Divergente** | Usuário e máquina em centros de custo diferentes — compara `default_entity` do usuário com `entity` do computador |
+| **Múltiplos Responsáveis** | Computadores com mais de um usuário atribuído simultaneamente (`user` e `user_tech` distintos) |
 
 A análise é disparada manualmente via botão no dashboard ou via `POST /api/analise-usuarios/sync`. Os resultados ficam disponíveis em `GET /api/analise-usuarios`.
 
@@ -70,65 +91,67 @@ A análise é disparada manualmente via botão no dashboard ou via `POST /api/an
 
 ## Dashboard
 
-Interface de operações construída com HTML5 + Tailwind CSS + JavaScript Vanilla. Sem frameworks pesados, sem build step.
+Interface de operações construída com HTML5, Tailwind CSS e JavaScript Vanilla. Sem frameworks, sem build step, sem dependências de runtime no frontend.
 
-| Funcionalidade           | Detalhe                                                                             |
-|--------------------------|-------------------------------------------------------------------------------------|
-| **Dark / Light Mode**    | Toggle persistido em `localStorage`, sem flash ao carregar                          |
-| **Filtros de Status**    | Chips clicáveis: Todos · Novo · Em Atendimento · Pendente · Termos                  |
-| **Busca Global**         | Filtra por ID, Título e Requerente em tempo real                                    |
-| **Ordenação**            | Qualquer coluna, asc/desc                                                           |
-| **Densidade da Tabela**  | Modo Confortável e Modo Denso                                                       |
-| **SLA Visual**           | Barra de progresso colorida (verde → amarelo → vermelho) proporcional ao prazo      |
-| **Drawer de Detalhe**    | Painel lateral com timeline completa e atributos do chamado                         |
-| **KPI Sparklines**       | Miniséries históricas de 14 dias: Total, Em Atendimento, Pendentes, Termos OK       |
-| **Intervalo de Sync**    | Dropdown configurável: 10 s · 30 s · 1 min · 2 min · 5 min (persistido no browser) |
-| **Atalhos de Teclado**   | `/` = foco na busca · `R` = forçar sync · `Esc` = fechar painel                    |
-
----
-
-## Exportação de Dados
-
-Disponível em `GET /api/contratacoes/export?formato=xlsx|pdf|csv` com filtro opcional por `termo`.
-
-| Formato  | Características                                                                                                           |
-|----------|---------------------------------------------------------------------------------------------------------------------------|
-| **XLSX** | Banner laranja da marca, linha de metadados, cabeçalhos formatados; Status e Termo com cores condicionais; SLA em vermelho/âmbar; impressão A4 paisagem configurada |
-| **PDF**  | Layout A4 paisagem via `reportlab` (Platypus); título em laranja; cores condicionais por célula; rodapé com timestamp e número de página |
-| **CSV**  | UTF-8 plain text, compatível com Excel, LibreOffice e qualquer ferramenta de dados                                        |
+| Funcionalidade | Detalhe |
+|---|---|
+| Dark / Light Mode | Toggle persistido em `localStorage`, sem flash ao carregar |
+| Filtros de Status | Chips clicáveis: Todos · Novo · Em Atendimento · Pendente · Termos |
+| Busca Global | Filtra por ID, Título e Requerente em tempo real |
+| Ordenação | Qualquer coluna, crescente ou decrescente |
+| Densidade da Tabela | Modo Confortável e Modo Denso |
+| SLA Visual | Barra de progresso colorida proporcional ao prazo restante |
+| Drawer de Detalhe | Painel lateral com timeline completa do chamado |
+| KPI Sparklines | Miniséries históricas de 14 dias para as principais métricas |
+| Intervalo de Sync | Dropdown configurável: 10 s · 30 s · 1 min · 2 min · 5 min, persistido no browser |
+| Atalhos de Teclado | `/` foca a busca · `R` força sync · `Esc` fecha o painel |
 
 ---
 
-## Stack Tecnológica
+## Exportação
+
+Disponível via `GET /api/contratacoes/export?formato=xlsx|pdf|csv` com filtro opcional por `termo`.
+
+| Formato | Características |
+|---|---|
+| **XLSX** | Banner de identidade visual, linha de metadados, cabeçalhos formatados; células de Status e Termo com cores condicionais; SLA em vermelho/âmbar; layout de impressão A4 paisagem configurado |
+| **PDF** | Layout A4 paisagem via `reportlab` (Platypus); paleta de cores consistente com o dashboard; rodapé com timestamp e número de página |
+| **CSV** | UTF-8 plain text, compatível com Excel, LibreOffice e qualquer ferramenta de análise de dados |
+
+---
+
+## Stack
 
 ### Backend
 
-| Componente        | Tecnologia                                           |
-|-------------------|------------------------------------------------------|
-| Servidor web      | FastAPI + Uvicorn                                    |
-| Worker de sync    | Python `threading` (daemon thread)                   |
-| Integração API    | `requests` — Verdanadesk REST v2.3 com OAuth2        |
-| Exportação Excel  | `openpyxl`                                           |
-| Exportação PDF    | `reportlab` (Platypus)                               |
-| Configuração      | `python-dotenv` (`.env`)                             |
+| Componente | Tecnologia |
+|---|---|
+| Servidor web | FastAPI + Uvicorn |
+| Worker de sync | Python `threading` (daemon thread) |
+| Integração API | `requests` — Verdanadesk REST v2.3 com OAuth2 Password Grant |
+| Exportação Excel | `openpyxl` |
+| Exportação PDF | `reportlab` (Platypus) |
+| Configuração | `python-dotenv` |
 
 ### Frontend
 
-| Componente    | Tecnologia                                                          |
-|---------------|---------------------------------------------------------------------|
-| Estilo        | Tailwind CSS via CDN (zero build step)                              |
-| Tipografia    | Geist + Geist Mono (Vercel)                                         |
-| Lógica        | JavaScript Vanilla (ES2022)                                         |
-| Design System | CSS Custom Properties (`--accent`, `--ok`, `--warn`, `--err`, etc.) |
+| Componente | Tecnologia |
+|---|---|
+| Estilo | Tailwind CSS via CDN |
+| Tipografia | Geist + Geist Mono (Vercel) |
+| Lógica | JavaScript Vanilla (ES2022) |
+| Design System | CSS Custom Properties — `--accent`, `--ok`, `--warn`, `--err`, `--surface` |
 
 ### Persistência
 
 ```
-database/                       ← gerado em runtime, ignorado pelo git
-  contratacoes.json             ← snapshot atual dos chamados ativos
-  historico.json                ← série temporal diária (últimos 60 dias de KPIs)
-  usuarios_analise.json         ← resultado da última análise de usuários/máquinas
+database/
+  contratacoes.json        snapshot atual dos chamados ativos
+  historico.json           série temporal diária (últimos 60 dias de KPIs)
+  usuarios_analise.json    resultado da última análise de usuários × máquinas
 ```
+
+> A pasta `database/` é gerada em runtime e ignorada pelo git.
 
 ---
 
@@ -137,68 +160,71 @@ database/                       ← gerado em runtime, ignorado pelo git
 ```
 python run.py
 │
-├── [thread principal] Uvicorn → FastAPI (main.py)
-│     GET  /                              → frontend/index.html
-│     GET  /api/contratacoes              → database/contratacoes.json
-│     GET  /api/contratacoes/export       → XLSX / PDF / CSV
-│     GET  /api/historico                 → database/historico.json
-│     GET  /api/analise-usuarios          → database/usuarios_analise.json
-│     POST /api/analise-usuarios/sync     → dispara varredura em background
-│     GET  /api/analise-usuarios/status   → flag de sync em andamento
-│     GET  /docs                          → Swagger UI (automático)
+├── [thread principal]  Uvicorn → FastAPI
+│     GET  /                            dashboard (frontend/index.html)
+│     GET  /api/config                  URL base do Verdanadesk (via env)
+│     GET  /api/contratacoes            snapshot de chamados ativos
+│     GET  /api/contratacoes/export     XLSX / PDF / CSV
+│     GET  /api/historico               série temporal de KPIs
+│     GET  /api/analise-usuarios        resultado da análise de inventário
+│     POST /api/analise-usuarios/sync   dispara varredura em background
+│     GET  /api/analise-usuarios/status flag de sync em andamento
+│     GET  /docs                        Swagger UI (gerado automaticamente)
 │
-└── [daemon thread] glpi_sync.py
-      loop (POLLING_INTERVAL segundos)
+└── [daemon thread]  glpi_sync.py
+      loop a cada POLLING_INTERVAL segundos
         │
-        ├─ ClienteGLPI — OAuth2 Password Grant com auto-renewal
-        │     POST /api.php/token              → access_token
-        │     GET  /Administration/User/{id}   → lookup com cache em memória
-        │     GET  /search/Ticket?...          → chamados paginados por categoria
-        │     GET  /Ticket/{id}/TicketTask     → verificação de termo (read-only)
+        ├─ ClienteGLPI  OAuth2 Password Grant + auto-renewal em 401
+        │     POST /api.php/token
+        │     GET  /Administration/User/{id}   lookup com cache em memória
+        │     GET  /search/Ticket              paginado por categoria
+        │     GET  /Ticket/{id}/TicketTask      verificação de termo (read-only)
         │
-        ├─ SincronizadorDB._chamado_para_dict()
-        │     ├─ buscar_nome_usuario()          (cache em memória, lazy)
-        │     ├─ buscar_data_inicio_conteudo()  (fallback regex no HTML do ticket)
-        │     └─ verificar_tarefa_termo()       (somente leitura)
+        ├─ SincronizadorDB
+        │     buscar_nome_usuario()            cache lazy em memória
+        │     buscar_data_inicio_conteudo()    fallback regex no HTML do ticket
+        │     verificar_tarefa_termo()         somente leitura
         │
-        └─ escrita atômica → database/contratacoes.json
-                           → database/historico.json
+        └─ escrita atômica
+              database/contratacoes.json
+              database/historico.json
 ```
 
 ### Princípios de Design
 
-| Princípio                       | Implementação                                                                        |
-|---------------------------------|--------------------------------------------------------------------------------------|
-| **Escrita atômica**             | `write .tmp → os.replace()` — JSON nunca fica corrompido, mesmo com reinicialização no meio da escrita |
-| **Auto-healing de sessão**      | `401/403` dispara `_renovar_sessao()` transparentemente — o worker nunca cai por token expirado |
-| **Separação de responsabilidades** | Worker só escreve JSON · API só lê JSON · Frontend só consome a API              |
-| **Read-only no Verdanadesk**    | O worker nunca cria, edita ou deleta dados na plataforma. Toda escrita é exclusivamente humana |
-| **Cache lazy de usuários**      | Lookup on-demand com `dict` em memória — evita N+1 sem bulk load inicial             |
+**Escrita atômica** — `write .tmp` → `os.replace()`. O JSON nunca fica em estado corrompido, mesmo que a aplicação seja encerrada no meio de uma escrita.
+
+**Auto-healing de sessão** — respostas `401` disparam `_renovar_sessao()` de forma transparente antes de retentar a requisição original. O worker nunca cai por expiração de token.
+
+**Separação de responsabilidades** — o worker só escreve JSON; a API só lê JSON; o frontend só consome a API. Nenhuma camada conhece os detalhes de implementação da anterior.
+
+**Read-only no Verdanadesk** — o worker nunca cria, edita ou deleta dados na plataforma. Toda escrita é exclusivamente humana.
+
+**Cache lazy** — lookup de usuários on-demand com `dict` em memória, evitando N+1 sem bulk load inicial.
 
 ---
 
 ## Configuração
 
-Copie o arquivo de exemplo e preencha com as credenciais reais:
-
 ```bash
 cp .env.example .env
+# edite o .env com suas credenciais
 ```
 
-| Variável                               | Obrigatória |  Padrão   | Descrição                                                                                        |
-|----------------------------------------|:-----------:|:---------:|--------------------------------------------------------------------------------------------------|
-| `API_URL`                              | ✅          | —         | URL base da API versionada (ex: `https://servidor.verdanadesk.com/api.php/v2.3`)                |
-| `OAUTH_CLIENT_ID`                      | ✅          | —         | Client ID registrado na plataforma Verdanadesk                                                   |
-| `OAUTH_CLIENT_SECRET`                  | ✅          | —         | Client Secret do app de integração                                                               |
-| `OAUTH_USERNAME`                       | ✅          | —         | Usuário de integração (email ou login)                                                           |
-| `OAUTH_PASSWORD`                       | ✅          | —         | Senha do usuário de integração                                                                   |
-| `CATEGORIA_CONTRATACAO_IDS`            | ✅          | —         | IDs das categorias monitoradas, separados por vírgula (ex: `152,153`)                           |
-| `OAUTH_TOKEN_URL`                      | ❌          | derivado  | Endpoint OAuth2. Se omitido, derivado de `API_URL` substituindo `/vX.Y` por `/token`            |
-| `CATEGORIA_CONTRATACAO_ID_WITH_ASSETS` | ❌          | desativado | ID único da categoria com controle de Termo de Responsabilidade                                 |
-| `POLLING_INTERVAL`                     | ❌          | `300`     | Intervalo entre varreduras do worker, em segundos                                                |
-| `WEB_PORT`                             | ❌          | `8000`    | Porta do servidor web                                                                            |
+| Variável | Obrigatória | Padrão | Descrição |
+|---|:---:|:---:|---|
+| `API_URL` | sim | — | URL base da API versionada |
+| `OAUTH_CLIENT_ID` | sim | — | Client ID registrado no Verdanadesk |
+| `OAUTH_CLIENT_SECRET` | sim | — | Client Secret do app de integração |
+| `OAUTH_USERNAME` | sim | — | Usuário de integração |
+| `OAUTH_PASSWORD` | sim | — | Senha do usuário de integração |
+| `CATEGORIA_CONTRATACAO_IDS` | sim | — | IDs das categorias monitoradas, separados por vírgula |
+| `OAUTH_TOKEN_URL` | não | derivado de `API_URL` | Endpoint OAuth2; se omitido, substituí `/vX.Y` por `/token` automaticamente |
+| `CATEGORIA_CONTRATACAO_ID_WITH_ASSETS` | não | desativado | ID da categoria com controle de Termo de Responsabilidade |
+| `POLLING_INTERVAL` | não | `300` | Intervalo entre varreduras do worker, em segundos |
+| `WEB_PORT` | não | `8000` | Porta do servidor web |
 
-> **Segurança:** `.env` está no `.gitignore` e **nunca deve ser commitado**. Use `.env.example` como referência para outros membros da equipe.
+> O arquivo `.env` está no `.gitignore` e nunca deve ser commitado. Use `.env.example` como referência.
 
 ---
 
@@ -207,32 +233,28 @@ cp .env.example .env
 **Pré-requisito:** Python 3.10 ou superior.
 
 ```bash
-# 1. Clone o repositório
+# Clone o repositório
 git clone https://github.com/Rhuuuyyyy/hirings-automation.git
 cd hirings-automation
 
-# 2. Crie e ative o ambiente virtual
+# Crie e ative o ambiente virtual
 python -m venv .venv
+source .venv/bin/activate        # Linux / macOS
+.venv\Scripts\activate           # Windows
 
-# Windows
-.venv\Scripts\activate
-
-# Linux / macOS
-source .venv/bin/activate
-
-# 3. Configure as variáveis de ambiente
+# Configure as variáveis de ambiente
 cp .env.example .env
-# edite o .env com suas credenciais
+# edite o .env
 
-# 4. Inicie a aplicação
+# Inicie a aplicação
 python run.py
 ```
 
-O `run.py` instala dependências automaticamente, sobe o worker GLPI em background e inicia o servidor. Nenhum `pip install` manual é necessário.
+O `run.py` instala as dependências automaticamente, sobe o worker em background e inicia o servidor. Nenhum `pip install` manual é necessário.
 
-| Endereço                     | Conteúdo                          |
-|------------------------------|-----------------------------------|
-| `http://localhost:8000`      | Dashboard principal               |
+| Endereço | Conteúdo |
+|---|---|
+| `http://localhost:8000` | Dashboard principal |
 | `http://localhost:8000/docs` | Swagger UI com todos os endpoints |
 
 Para encerrar: `Ctrl+C`.
@@ -244,97 +266,95 @@ Para encerrar: `Ctrl+C`.
 ```
 hirings-automation/
 │
-├── run.py                          ← Ponto de entrada único
-├── main.py                         ← Aplicação FastAPI (rotas + montagem)
+├── run.py                          ponto de entrada único
+├── main.py                         aplicação FastAPI
 ├── requirements.txt
-├── .env.example                    ← Template de configuração (commitar; não commitar .env)
+├── .env.example                    template de configuração
 │
 ├── automations/
 │   ├── contratacoes/
-│   │   └── glpi_sync.py            ← Worker de sincronização de chamados
+│   │   └── glpi_sync.py            worker de sincronização de chamados
 │   └── usuarios/
 │       ├── __init__.py
-│       └── usuarios_sync.py        ← Worker de análise de usuários × máquinas
+│       └── usuarios_sync.py        worker de análise de usuários × máquinas
 │
 ├── backend/
-│   └── api.py                      ← Rotas REST (contratacoes, historico, export, analise-usuarios)
+│   └── api.py                      rotas REST
 │
 ├── frontend/
-│   └── index.html                  ← Dashboard SPA (HTML + Tailwind + JS Vanilla)
+│   └── index.html                  dashboard SPA
 │
-├── database/                       ← Gerado em runtime (ignorado pelo git)
-│   ├── contratacoes.json
-│   ├── historico.json
-│   └── usuarios_analise.json
+├── database/                       gerado em runtime — ignorado pelo git
 │
-├── .brain/                         ← Documentação interna e decisões de arquitetura
+├── .brain/                         documentação interna e decisões de arquitetura
 │   ├── architecture.md
 │   ├── roadmap.md
 │   ├── glpi_api_quirks.md
 │   ├── task_automation.md
 │   └── sharepoint_graph_api.md
 │
-└── .archive/                       ← Versões anteriores (referência histórica)
-    ├── automation.py               ← v1: LangChain + Google Gemini
-    ├── boilerplate.py
-    └── run.py
+└── .archive/                       versões anteriores para referência histórica
+    ├── automation.py               v1 — LangChain + Google Gemini
+    └── boilerplate.py
 ```
 
 ---
 
-## Autenticação com o Verdanadesk
+## Adicionando um Módulo
 
-A versão atual usa **OAuth2 Password Grant** (API v2.3), substituindo o esquema legado de `App-Token` + `User-Token` + `Session-Token` das versões anteriores.
+O padrão de extensão do Hub:
 
 ```
-POST /api.php/token
-Content-Type: application/x-www-form-urlencoded
+1. Worker      automations/<nome>/<nome>_sync.py
+               implemente executar(glpi) e is_running()
 
-grant_type=password&client_id=...&client_secret=...&username=...&password=...
+2. API         backend/api.py
+               GET  /api/<nome>
+               POST /api/<nome>/sync
+               GET  /api/<nome>/status
 
-Resposta: {"access_token": "...", "token_type": "Bearer", "expires_in": 3600}
+3. Frontend    frontend/index.html
+               entrada no menu lateral  id="nav-<nome>"
+               função fetch<Nome>() seguindo o padrão existente
+
+4. Banco       database/<nome>.json
+               já coberto pelo .gitignore via database/*.json
 ```
-
-O `ClienteGLPI` em `glpi_sync.py` gerencia o ciclo de vida do token automaticamente: qualquer `401` dispara `_renovar_sessao()` de forma transparente antes de retentar a requisição original.
-
----
-
-## Adicionando um Novo Módulo
-
-1. **Worker:** crie `automations/<nome>/` com `__init__.py` e `<nome>_sync.py`. Implemente `executar(glpi)` e `is_running()` seguindo o padrão de `usuarios_sync.py`.
-2. **API:** adicione as rotas em `backend/api.py` — `GET /<nome>`, `POST /<nome>/sync` e `GET /<nome>/status`.
-3. **Frontend:** adicione a entrada no menu lateral de `frontend/index.html` com `id="nav-<nome>"` e implemente `fetch<Nome>()` no padrão das funções existentes.
-4. **Banco:** a persistência vai em `database/<nome>.json` — já coberto pelo `.gitignore` com o padrão `database/*.json`.
 
 ---
 
 ## Histórico de Versões
 
-| Versão | Arquitetura                                    | Status                   |
-|--------|------------------------------------------------|--------------------------|
-| v1     | LangChain + Google Gemini (extração via LLM)   | Arquivado em `.archive/` |
-| v2     | ETL local → arquivo `.xlsx` via Power Automate | Substituído              |
-| v3     | Verdanadesk API → JSON → FastAPI → Dashboard   | **Atual**                |
+| Versão | Arquitetura | Status |
+|---|---|---|
+| v1 | LangChain + Google Gemini — extração de dados via LLM | Arquivado em `.archive/` |
+| v2 | ETL local para arquivo `.xlsx` via Power Automate | Substituído |
+| v3 | Verdanadesk REST API → JSON → FastAPI → Dashboard | **Atual** |
 
 ---
 
 ## Roadmap
 
-### Em Desenvolvimento
-- [ ] Automação de Termos de Responsabilidade (criação automática da tarefa no GLPI ao abrir chamado com ativo)
-- [ ] Notificações por Teams quando SLA estiver crítico
+**Em desenvolvimento**
 
-### Backlog
-- [ ] Filtro por intervalo de datas no dashboard de contratações
-- [ ] Pré-carregamento em bulk de usuários (`GET /Administration/User?limit=9999`) para eliminar round-trips N+1 na inicialização
-- [ ] Testes automatizados com mock da API Verdanadesk
-- [ ] Módulo de Onboarding — checklist de entrada para novos funcionários
-- [ ] Suporte a múltiplas instâncias Verdanadesk
+- Automação de criação do Termo de Responsabilidade — tarefa criada automaticamente no GLPI ao abrir chamado com ativo vinculado
+- Notificações por Teams quando SLA estiver crítico
+
+**Backlog**
+
+- Filtro por intervalo de datas no dashboard
+- Pré-carregamento em bulk de usuários para eliminar round-trips N+1 na inicialização
+- Testes automatizados com mock da API Verdanadesk
+- Módulo de Onboarding — checklist de entrada para novos funcionários
 
 ---
 
 <div align="center">
 
-Feito pela equipe de TI da **Dexian** · Uso interno · Não distribuir externamente
+<br>
+
+Desenvolvido pela equipe de TI da **Dexian** &nbsp;·&nbsp; Uso interno &nbsp;·&nbsp; Não distribuir externamente
+
+<br>
 
 </div>
