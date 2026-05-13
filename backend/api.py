@@ -36,6 +36,17 @@ _VAZIO = json.dumps(
 _VAZIO_HIST = json.dumps([], ensure_ascii=False)
 
 
+def _verdanadesk_base() -> str:
+    api_url = os.getenv("API_URL", "")
+    idx = api_url.find("/api.php")
+    return api_url[:idx] if idx != -1 else api_url.rstrip("/")
+
+
+@router.get("/config", summary="Configurações públicas do servidor")
+async def get_config() -> JSONResponse:
+    return JSONResponse({"verdanadesk_url": _verdanadesk_base()})
+
+
 @router.get("/contratacoes", summary="Chamados de contratação ativos")
 async def get_contratacoes() -> Response:
     if not _DB_CONTRATACOES.exists():

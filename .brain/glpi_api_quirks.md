@@ -3,12 +3,12 @@
 ## Endpoint Base
 
 A variável `GLPI_URL` no `.env` **já inclui** `/apirest.php`.  
-Exemplo: `http://10.172.8.48/apirest.php`
+Exemplo: `http://glpi.empresa.com/apirest.php`
 
 Todos os endpoints são construídos como `{GLPI_URL}/{recurso}`:
-- `http://10.172.8.48/apirest.php/initSession`
-- `http://10.172.8.48/apirest.php/search/Ticket`
-- `http://10.172.8.48/apirest.php/User/42`
+- `http://glpi.empresa.com/apirest.php/initSession`
+- `http://glpi.empresa.com/apirest.php/search/Ticket`
+- `http://glpi.empresa.com/apirest.php/User/42`
 
 ---
 

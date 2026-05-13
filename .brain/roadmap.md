@@ -51,6 +51,6 @@
 
 ## Notas de Campo
 
-- A instância GLPI usa URL interna `http://10.172.8.48/apirest.php` (sem HTTPS).
+- A instância GLPI usa URL interna sem HTTPS (configurar via `API_URL` no `.env`).
 - O campo `User-Agent` pode ser necessário em algumas versões do GLPI para evitar bloqueio (ver `automation.py` legado).
 - Field IDs da Search API devem ser validados com `GET /listSearchOptions/Ticket` se houver retornos inesperados.

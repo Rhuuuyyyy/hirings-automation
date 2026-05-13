@@ -1562,6 +1562,16 @@
   }
 
   // ═══════════════════════════════════════════════════════
+  // Config (verdanadesk base URL, loaded once on startup)
+  // ═══════════════════════════════════════════════════════
+  let _vdBase = '';
+  fetch('/api/config').then(r => r.json()).then(d => { _vdBase = d.verdanadesk_url || ''; }).catch(() => {});
+
+  function ticketUrl(id) {
+    return _vdBase ? `${_vdBase}/front/ticket.form.php?id=${encodeURIComponent(id)}` : '#';
+  }
+
+  // ═══════════════════════════════════════════════════════
   // Sync state
   // ═══════════════════════════════════════════════════════
   let countdownTimer = null;
@@ -1779,7 +1789,7 @@
       const alertAttr = alert ? ` data-alert="${alert}"` : '';
       return `
       <tr class="row-enter row-clickable border-t hairline"${alertAttr} data-idx="${i}" style="animation-delay: ${Math.min(i, 20) * 12}ms; border-color: var(--line); cursor: pointer;">
-        <td class="px-4 align-middle whitespace-nowrap mono text-[11.5px]" style="color: var(--text-3);"><a href="https://dexian.verdanadesk.com/front/ticket.form.php?id=${encodeURIComponent(c.ID_do_Chamado)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color: var(--text-3); text-decoration: none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">#${escHtml(c.ID_do_Chamado)}</a></td>
+        <td class="px-4 align-middle whitespace-nowrap mono text-[11.5px]" style="color: var(--text-3);"><a href="${ticketUrl(c.ID_do_Chamado)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color: var(--text-3); text-decoration: none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">#${escHtml(c.ID_do_Chamado)}</a></td>
         <td class="px-4 align-middle max-w-[420px]">
           <span class="truncate-2 text-[12.5px] font-medium" style="color: var(--text);" title="${escHtml(c.Titulo)}">${escHtml(c.Titulo) || '—'}</span>
         </td>

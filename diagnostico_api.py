@@ -14,8 +14,9 @@ CLIENT_SECRET = os.getenv("OAUTH_CLIENT_SECRET", "")
 USERNAME      = os.getenv("OAUTH_USERNAME", "")
 PASSWORD      = os.getenv("OAUTH_PASSWORD", "")
 
-BASE      = "https://dexian.verdanadesk.com/api.php/v2.3"
-TOKEN_URL = "https://dexian.verdanadesk.com/api.php/token"
+BASE      = os.getenv("API_URL", "")
+_api_root = BASE[:BASE.find("/api.php")] if "/api.php" in BASE else BASE.rstrip("/")
+TOKEN_URL = f"{_api_root}/api.php/token"
 
 r = requests.post(TOKEN_URL, data={
     "grant_type": "password", "client_id": CLIENT_ID,
