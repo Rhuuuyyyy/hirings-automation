@@ -353,7 +353,7 @@ O padrão de extensão do Hub:
 
 <br>
 
-Desenvolvido pela equipe de TI da **Dexian** &nbsp;·&nbsp; Uso interno &nbsp;·&nbsp; 
+Desenvolvido pela equipe de TI da **Dexian** &nbsp;
 
 <br>
 
